@@ -1,0 +1,7 @@
+node_modules/
+.env
+.env.local
+.aws-sam/
+coverage/
+*.log
+.DS_Store

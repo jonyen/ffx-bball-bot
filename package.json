@@ -1,0 +1,19 @@
+{
+  "name": "ffx-bball-bot",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Slack bot that posts a basketball roll-call for Fairfax, VA twice a week and tracks RSVPs via reactions",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "post:local": "node scripts/run-postMessage.js",
+    "deploy": "bash scripts/deploy.sh"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.4"
+  }
+}

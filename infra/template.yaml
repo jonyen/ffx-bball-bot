@@ -1,0 +1,104 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Basketball Slack bot — twice-weekly roll-call for Fairfax, VA
+
+Parameters:
+  SlackBotToken:
+    Type: String
+    NoEcho: true
+    Description: Slack bot OAuth token (xoxb-...)
+  SlackSigningSecret:
+    Type: String
+    NoEcho: true
+    Description: Slack signing secret for webhook verification
+  SlackBotUserId:
+    Type: String
+    Description: Slack user ID of the bot itself (used to filter reactions on own messages)
+  OpenWeatherMapApiKey:
+    Type: String
+    NoEcho: true
+    Description: OpenWeatherMap API key
+  SlackChannel:
+    Type: String
+    Default: C03H7SUSUTZ
+    Description: Target Slack channel ID
+
+Globals:
+  Function:
+    Runtime: nodejs20.x
+    MemorySize: 256
+    Timeout: 10
+    Architectures: [arm64]
+    Environment:
+      Variables:
+        SLACK_BOT_TOKEN: !Ref SlackBotToken
+        SLACK_SIGNING_SECRET: !Ref SlackSigningSecret
+        SLACK_BOT_USER_ID: !Ref SlackBotUserId
+        OPENWEATHERMAP_API_KEY: !Ref OpenWeatherMapApiKey
+        SLACK_CHANNEL: !Ref SlackChannel
+
+Resources:
+  PostMessageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ffx-bball-post-message
+      CodeUri: ../src/
+      Handler: postMessage/handler.handler
+      Description: Posts the basketball roll-call message twice a week
+      Events:
+        Schedule:
+          Type: Schedule
+          Properties:
+            # 13:00 UTC Tue/Thu = 8am EST (9am EDT during DST)
+            Schedule: cron(0 13 ? * TUE,THU *)
+            Name: ffx-bball-post-schedule
+            Description: Tue/Thu 8am EST basketball roll-call
+
+  ReactionHandlerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ffx-bball-reaction-handler
+      CodeUri: ../src/
+      Handler: reactionHandler/handler.handler
+      Description: Handles Slack reaction events and updates the roll-call message
+      Events:
+        SlackEvents:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SlackEventsApi
+            Method: POST
+            Path: /slack/events
+
+  SlashCommandFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ffx-bball-slash-command
+      CodeUri: ../src/
+      Handler: slashCommand/handler.handler
+      Description: Handles the /ball slash command and posts a custom roll-call message
+      Events:
+        SlackCommand:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref SlackEventsApi
+            Method: POST
+            Path: /slack/commands
+
+  SlackEventsApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      StageName: $default
+
+Outputs:
+  SlackEventsUrl:
+    Description: POST this URL into the Slack app's Event Subscriptions Request URL
+    Value: !Sub https://${SlackEventsApi}.execute-api.${AWS::Region}.amazonaws.com/slack/events
+  SlackCommandsUrl:
+    Description: POST this URL into the Slack app's /ball slash command Request URL
+    Value: !Sub https://${SlackEventsApi}.execute-api.${AWS::Region}.amazonaws.com/slack/commands
+  PostMessageFunctionArn:
+    Value: !GetAtt PostMessageFunction.Arn
+  ReactionHandlerFunctionArn:
+    Value: !GetAtt ReactionHandlerFunction.Arn
+  SlashCommandFunctionArn:
+    Value: !GetAtt SlashCommandFunction.Arn

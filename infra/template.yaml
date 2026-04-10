@@ -45,14 +45,39 @@ Resources:
       CodeUri: ../src/
       Handler: postMessage/handler.handler
       Description: Posts the basketball roll-call message twice a week
-      Events:
-        Schedule:
-          Type: Schedule
-          Properties:
-            # 13:00 UTC Tue/Thu = 8am EST (9am EDT during DST)
-            Schedule: cron(0 13 ? * TUE,THU *)
-            Name: ffx-bball-post-schedule
-            Description: Tue/Thu 8am EST basketball roll-call
+
+  PostScheduleRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: scheduler.amazonaws.com
+            Action: sts:AssumeRole
+      Policies:
+        - PolicyName: InvokePostMessage
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: lambda:InvokeFunction
+                Resource: !GetAtt PostMessageFunction.Arn
+
+  PostSchedule:
+    Type: AWS::Scheduler::Schedule
+    Properties:
+      Name: ffx-bball-post-schedule
+      Description: Tue/Thu 8am ET basketball roll-call (DST-aware)
+      ScheduleExpression: cron(0 8 ? * TUE,THU *)
+      ScheduleExpressionTimezone: America/New_York
+      FlexibleTimeWindow:
+        Mode: 'OFF'
+      State: ENABLED
+      Target:
+        Arn: !GetAtt PostMessageFunction.Arn
+        RoleArn: !GetAtt PostScheduleRole.Arn
 
   ReactionHandlerFunction:
     Type: AWS::Serverless::Function

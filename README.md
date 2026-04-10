@@ -8,7 +8,7 @@ Design doc: `docs/superpowers/specs/2026-04-09-basketball-slack-bot-design.md`
 
 Three AWS Lambda functions:
 
-- **postMessage** — EventBridge cron triggers it Tue/Thu 13:00 UTC. Fetches weather, formats, posts the default `🏀 today?` roll-call.
+- **postMessage** — EventBridge Scheduler cron triggers it Tue/Thu 8:00 AM America/New_York (DST-aware). Fetches weather, formats, posts the default `🏀 today?` roll-call.
 - **reactionHandler** — API Gateway HTTP API route `POST /slack/events`. Verifies signature, re-fetches reaction state, rewrites the message via `chat.update`. Preserves any custom header (e.g. from `/ball`).
 - **slashCommand** — API Gateway HTTP API route `POST /slack/commands`. Handles `/ball <message>` — posts an ad-hoc roll-call with the user's custom header text and a mention attributing the caller. The reactionHandler handles reactions on these the same way it does scheduled posts.
 
@@ -102,6 +102,6 @@ Required bot token scopes: `chat:write`, `reactions:read`, `channels:history`, `
 
 ## Notes
 
-- **DST:** the cron fires at 13:00 UTC year-round, so posts land at 8am EST (winter) and 9am EDT (summer).
+- **Scheduling:** the cron runs on EventBridge Scheduler with `ScheduleExpressionTimezone: America/New_York`, so 8:00 AM ET stays fixed year-round across DST transitions.
 - **Stateless:** no DB. Every reaction event re-fetches the full reaction state, so a dropped event self-heals on the next reaction.
 - **Weather fallback:** if OpenWeatherMap fails or times out (3s), the bot posts without the weather line.

@@ -51,8 +51,6 @@ function formatScheduleView({ scheduleName, current }) {
     '',
     'Update with `/ball schedule <cron expression>` — e.g.',
     '`/ball schedule 0 7 ? * MON,WED,FRI *`',
-    '',
-    '_Note: changes via `/ball schedule` may be reset on the next `sam deploy`._',
   ].join('\n');
 }
 
@@ -123,8 +121,6 @@ async function handleSchedule({
       `✅ Schedule updated.`,
       `• Expression: \`${newExpression}\``,
       `• Timezone: ${tz}`,
-      '',
-      '_Note: this change may be reset on the next `sam deploy`._',
     ].join('\n'),
   );
 }

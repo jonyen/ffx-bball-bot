@@ -22,6 +22,14 @@ Parameters:
     Type: String
     Default: C03H7SUSUTZ
     Description: Comma-separated list of target Slack channel IDs
+  ScheduleExpression:
+    Type: String
+    Default: cron(0 8 ? * TUE,THU *)
+    Description: >-
+      EventBridge Scheduler expression for the twice-weekly roll-call post.
+      scripts/deploy.sh reads the current live value from EventBridge and
+      passes it in here so runtime changes via /ball schedule persist across
+      deploys.
 
 Globals:
   Function:
@@ -70,7 +78,7 @@ Resources:
     Properties:
       Name: ffx-bball-post-schedule
       Description: Tue/Thu 8am ET basketball roll-call (DST-aware)
-      ScheduleExpression: cron(0 8 ? * TUE,THU *)
+      ScheduleExpression: !Ref ScheduleExpression
       ScheduleExpressionTimezone: America/New_York
       FlexibleTimeWindow:
         Mode: 'OFF'
@@ -101,6 +109,20 @@ Resources:
       CodeUri: ../src/
       Handler: slashCommand/handler.handler
       Description: Handles the /ball slash command and posts a custom roll-call message
+      Environment:
+        Variables:
+          SCHEDULE_NAME: !Ref PostSchedule
+          SCHEDULE_GROUP: default
+      Policies:
+        - Statement:
+            - Effect: Allow
+              Action:
+                - scheduler:GetSchedule
+                - scheduler:UpdateSchedule
+              Resource: !GetAtt PostSchedule.Arn
+            - Effect: Allow
+              Action: iam:PassRole
+              Resource: !GetAtt PostScheduleRole.Arn
       Events:
         SlackCommand:
           Type: HttpApi

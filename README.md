@@ -43,6 +43,40 @@ To fix a typo or change the time after posting, run:
 
 This rewrites the most recent bball message in the current channel with the new header text, preserving the current reactions (In/Out/Unsure) and refreshing the weather for "now". It only touches the channel where the command is run — other channels in `SLACK_CHANNELS` are left alone.
 
+### Viewing and updating the scheduled post
+
+```
+/ball schedule
+```
+
+Shows the current EventBridge schedule that drives the twice-weekly post (expression, timezone, enabled state) as an ephemeral message.
+
+Update it with natural language, like Slack's `/remind`:
+
+```
+/ball schedule every Tue, Thu at 8am
+/ball schedule every weekday at 9:30am
+/ball schedule every day at noon
+/ball schedule every mon,wed,fri at 7am
+/ball schedule every Friday at 5pm
+```
+
+The handler parses day(s) + time and translates to a cron expression in the schedule's existing timezone (`America/New_York`). The response echoes both the resulting cron and an `Interpreted as:` line so you can confirm the parse before it takes effect. Unambiguous 12-hour times (`am`/`pm`, or `noon`/`midnight`) and 24-hour `HH:MM` forms are both accepted; plain "8" without `am`/`pm` or a colon is rejected as ambiguous.
+
+**`every` is required for recurrence.** Bare forms like `/ball schedule Tuesday at 8am` are rejected with a suggested fix (`every Tuesday at 8am`). One-shot scheduling isn't supported — there's a single shared EventBridge schedule that gets mutated in place, so a one-shot fire would leave it in a terminal state and the next scheduled post would stop happening. Plural day names (`tuesdays`, `mondays`), the group aliases (`weekday`/`weekdays`/`weekend`/`weekends`), and `daily`/`everyday` all count as recurrence markers and are accepted without an explicit `every`.
+
+Raw cron and rate expressions still work for power users:
+
+```
+/ball schedule 0 7 ? * MON,WED,FRI *        # bare cron — auto-wrapped
+/ball schedule cron(30 17 ? * FRI *)        # already-wrapped cron
+/ball schedule rate(1 day)                  # rate expressions also accepted
+```
+
+The command calls `scheduler:GetSchedule` and `scheduler:UpdateSchedule` on the stack's `ffx-bball-post-schedule`, preserving the target, role, flexible-window config, and timezone. Only the expression changes.
+
+**Persistence across deploys.** `scripts/deploy.sh` reads the current live `ScheduleExpression` from EventBridge Scheduler before each deploy and passes it as `--parameter-overrides ScheduleExpression=...`, so runtime changes made via `/ball schedule` survive `sam deploy`. On the very first deploy (when the schedule doesn't exist yet) the template default `cron(0 8 ? * TUE,THU *)` is used. If you run `sam deploy` manually without the wrapper script, pass `--parameter-overrides ScheduleExpression="<cron>"` yourself or the template default will overwrite the live value.
+
 ## Reactions
 
 | Emoji | Category |
@@ -67,11 +101,14 @@ src/
   slashCommand/      # /ball slash command Lambda
     handler.js
   shared/
-    slack.js         # Slack API client + notifyFailure
-    formatMessage.js # shared message formatter (+ parseHeader, parseWeatherLine)
+    slack.js          # Slack API client + notifyFailure
+    formatMessage.js  # shared message formatter (+ parseHeader, parseWeatherLine)
+    scheduler.js      # EventBridge Scheduler client for /ball schedule
+    scheduleParser.js # natural-language → cron parser for /ball schedule
 test/                # vitest
 infra/
-  template.yaml      # AWS SAM
+  template.yaml      # AWS SAM — main app stack
+  github-oidc.yaml   # bootstrap stack — GitHub OIDC provider + deploy role
 ```
 
 ## Development
@@ -109,6 +146,64 @@ After the first deploy:
 3. Invite the bot to the target channel.
 
 Required bot token scopes: `chat:write`, `reactions:read`, `channels:history`, `groups:history`, `commands`, `users:read`.
+
+The slash command Lambda also needs IAM permissions to manage the schedule (`scheduler:GetSchedule`, `scheduler:UpdateSchedule`, `iam:PassRole` on the scheduler role) — these are attached automatically by the SAM template.
+
+## Deploy from GitHub Actions
+
+The `.github/workflows/deploy.yml` workflow runs `scripts/deploy.sh` on:
+
+- **push to `main`** — when any of `src/**`, `infra/**`, `scripts/deploy.sh`, `package*.json`, or the workflow file itself changes.
+- **manual `workflow_dispatch`** — from the Actions tab in GitHub.
+
+The workflow installs dependencies, runs `npm test` as a **pre-deploy gate** (broken suite → no deploy), installs the SAM CLI, authenticates to AWS via OIDC, and finally calls `scripts/deploy.sh` — so the live-schedule preservation described above is honored in CI too.
+
+Concurrency is pinned to the stack name (`deploy-ffx-bball-bot`, `cancel-in-progress: false`) so two deploys can't race CloudFormation.
+
+### One-time AWS setup (OIDC)
+
+The workflow authenticates via GitHub OIDC — no long-lived AWS access keys. Everything you need is provisioned by a bootstrap CloudFormation stack (`infra/github-oidc.yaml`) plus a wrapper script that runs it for you:
+
+```bash
+bash scripts/bootstrap-oidc.sh
+```
+
+The script:
+
+1. Checks for an existing GitHub OIDC identity provider in your account (they're account-global, so if you already have one for another repo, it's reused).
+2. Deploys the `ffx-bball-bot-github-oidc` CFN stack, which creates the deploy IAM role with a trust policy scoped to `repo:jonyen/ffx-bball-bot:*` — nobody else's workflow can assume it.
+3. Prints the role ARN you paste into the `AWS_DEPLOY_ROLE_ARN` GitHub secret.
+
+Overrides (env vars):
+
+| Var | Default | Notes |
+|---|---|---|
+| `GITHUB_ORG` | `jonyen` | Override if you forked the repo. |
+| `GITHUB_REPO` | `ffx-bball-bot` | |
+| `REGION` | `us-east-1` | |
+| `STACK_NAME` | `ffx-bball-bot-github-oidc` | |
+| `SUB_FILTER` | `*` | Set to `environment:production` to only allow runs that target the production environment, or `ref:refs/heads/main` to lock to `main`. |
+
+Run it with an AWS identity that has IAM + CloudFormation permissions (your own admin user works for a one-shot bootstrap). The stack attaches `AdministratorAccess` to the deploy role by default — pragmatic for a personal project because SAM needs broad perms to create IAM roles, Lambda functions, API Gateway, the Scheduler resource, and CFN stacks. You can tighten to a custom managed policy later by editing `infra/github-oidc.yaml`.
+
+If you'd rather set this up by hand instead of running the script, the template at `infra/github-oidc.yaml` documents exactly what it creates and you can deploy it directly with `aws cloudformation deploy`.
+
+### GitHub secrets
+
+In the repo → **Settings → Secrets and variables → Actions → New repository secret**, create:
+
+| Secret | Value |
+|---|---|
+| `AWS_DEPLOY_ROLE_ARN` | the IAM role ARN from step 3 above |
+| `SLACK_BOT_TOKEN` | `xoxb-…` |
+| `SLACK_SIGNING_SECRET` | signing secret |
+| `SLACK_BOT_USER_ID` | the bot's user ID |
+| `OPENWEATHERMAP_API_KEY` | OWM key |
+| `SLACK_CHANNELS` | comma-separated channel IDs |
+
+### Optional: production environment protection
+
+Create a `production` environment in **Settings → Environments** and add deploy-protection rules (required reviewers, wait timer, branch restrictions). The workflow already references `environment: production`, so the rules take effect automatically — no workflow change needed.
 
 ## Notes
 

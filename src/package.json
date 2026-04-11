@@ -2,5 +2,8 @@
   "name": "ffx-bball-bot-lambda",
   "version": "0.1.0",
   "type": "module",
-  "private": true
+  "private": true,
+  "dependencies": {
+    "@aws-sdk/client-scheduler": "^3.645.0"
+  }
 }

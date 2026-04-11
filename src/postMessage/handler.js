@@ -1,12 +1,12 @@
 import { fetchWeather } from './weather.js';
 import { formatMessage } from '../shared/formatMessage.js';
-import { postMessage, notifyFailure } from '../shared/slack.js';
+import { postMessage, notifyFailure, parseChannels } from '../shared/slack.js';
 
 const EMPTY_ROSTER = { in: [], out: [], unsure: [] };
 
 export async function handler(_event) {
   const token = process.env.SLACK_BOT_TOKEN;
-  const channel = process.env.SLACK_CHANNEL;
+  const channels = parseChannels(process.env.SLACK_CHANNELS);
   const owmKey = process.env.OPENWEATHERMAP_API_KEY;
 
   let weather = null;
@@ -18,18 +18,33 @@ export async function handler(_event) {
 
   const text = formatMessage(EMPTY_ROSTER, weather);
 
-  try {
-    return await postMessage({ token, channel, text });
-  } catch (err) {
-    await notifyFailure({
-      token,
-      error: err,
-      context: {
-        lambda: 'postMessage',
-        phase: 'chat.postMessage',
-        channel,
-      },
-    });
-    throw err;
+  const results = await Promise.allSettled(
+    channels.map((channel) => postMessage({ token, channel, text })),
+  );
+
+  const failures = [];
+  for (let i = 0; i < results.length; i += 1) {
+    const result = results[i];
+    if (result.status === 'rejected') {
+      const channel = channels[i];
+      failures.push({ channel, error: result.reason });
+      await notifyFailure({
+        token,
+        error: result.reason,
+        context: {
+          lambda: 'postMessage',
+          phase: 'chat.postMessage',
+          channel,
+        },
+      });
+    }
   }
+
+  if (failures.length === channels.length && channels.length > 0) {
+    throw failures[0].error;
+  }
+
+  return results
+    .filter((r) => r.status === 'fulfilled')
+    .map((r) => r.value);
 }

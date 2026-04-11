@@ -30,6 +30,10 @@ Parameters:
       scripts/deploy.sh reads the current live value from EventBridge and
       passes it in here so runtime changes via /ball schedule persist across
       deploys.
+  GitSha:
+    Type: String
+    Default: unknown
+    Description: Commit SHA being deployed; surfaced via /ball info.
 
 Globals:
   Function:
@@ -113,6 +117,7 @@ Resources:
         Variables:
           SCHEDULE_NAME: !Ref PostSchedule
           SCHEDULE_GROUP: default
+          GIT_SHA: !Ref GitSha
       Policies:
         - Statement:
             - Effect: Allow

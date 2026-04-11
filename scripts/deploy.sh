@@ -32,7 +32,9 @@ SCHEDULE_NAME=ffx-bball-post-schedule
 # Preserve the live ScheduleExpression across deploys so that runtime changes
 # made via `/ball schedule` are not clobbered by the template default. On the
 # first deploy the schedule doesn't exist yet, so we fall back to the default.
-PARAMS="SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID OpenWeatherMapApiKey=$OPENWEATHERMAP_API_KEY SlackChannels=$SLACK_CHANNELS"
+GIT_SHA="${GITHUB_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
+
+PARAMS="SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID OpenWeatherMapApiKey=$OPENWEATHERMAP_API_KEY SlackChannels=$SLACK_CHANNELS GitSha=$GIT_SHA"
 
 SCHED_ERR="$(mktemp)"
 trap 'rm -f "$SCHED_ERR"' EXIT

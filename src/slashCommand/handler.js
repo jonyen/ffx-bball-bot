@@ -65,7 +65,10 @@ export async function handler(event) {
 
   let weather = null;
   try {
-    weather = await fetchWeather(owmKey, { timeoutMs: WEATHER_TIMEOUT_MS });
+    weather = await fetchWeather(owmKey, {
+      timeoutMs: WEATHER_TIMEOUT_MS,
+      target: 'now',
+    });
   } catch (err) {
     console.error('weather fetch failed', err);
   }

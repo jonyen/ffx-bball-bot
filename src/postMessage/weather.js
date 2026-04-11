@@ -60,7 +60,7 @@ function pickClosest(list, targetMs) {
 
 export async function fetchWeather(
   apiKey,
-  { timeoutMs = DEFAULT_TIMEOUT_MS, now = new Date() } = {},
+  { timeoutMs = DEFAULT_TIMEOUT_MS, now = new Date(), target = 'noon' } = {},
 ) {
   const url =
     `https://api.openweathermap.org/data/2.5/forecast` +
@@ -69,11 +69,13 @@ export async function fetchWeather(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
+  const targetMs = target === 'now' ? now.getTime() : noonEtMsFor(now);
+
   try {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) return null;
     const data = await response.json();
-    const entry = pickClosest(data.list, noonEtMsFor(now));
+    const entry = pickClosest(data.list, targetMs);
     if (!entry) return null;
     const main = entry.weather?.[0]?.main ?? '';
     const description = capitalize(entry.weather?.[0]?.description ?? '');

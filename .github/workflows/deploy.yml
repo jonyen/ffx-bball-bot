@@ -1,0 +1,67 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'infra/**'
+      - 'scripts/deploy.sh'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/deploy.yml'
+
+# Required for OIDC auth to AWS.
+permissions:
+  id-token: write
+  contents: read
+
+# Serialize deploys against the shared CloudFormation stack so two runs can't
+# race each other. Queue rather than cancel — mid-deploy cancellation leaves
+# CFN in a weird state that's painful to recover from.
+concurrency:
+  group: deploy-ffx-bball-bot
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: sam deploy
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dev dependencies
+        run: npm ci
+
+      - name: Run tests (pre-deploy gate)
+        run: npm test
+
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: us-east-1
+
+      - name: Deploy
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
+          SLACK_BOT_USER_ID: ${{ secrets.SLACK_BOT_USER_ID }}
+          OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
+          SLACK_CHANNELS: ${{ secrets.SLACK_CHANNELS }}
+        run: bash scripts/deploy.sh

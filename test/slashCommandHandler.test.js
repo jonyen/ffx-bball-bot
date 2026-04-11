@@ -326,4 +326,39 @@ describe('slashCommand handler', () => {
     expect(postMessage).not.toHaveBeenCalled();
     expect(notifyFailure).not.toHaveBeenCalled();
   });
+
+  test('`/ball edit` with no new text returns an ephemeral usage hint', async () => {
+    const res = await handler(
+      event({
+        command: '/ball',
+        text: 'edit',
+        user_id: 'U123',
+        user_name: 'alice',
+        channel_id: 'C_CURRENT',
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.response_type).toBe('ephemeral');
+    expect(body.text).toMatch(/usage/i);
+    expect(body.text).toMatch(/edit/i);
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test('`/ball edit   ` (whitespace-only) returns the same usage hint', async () => {
+    const res = await handler(
+      event({
+        command: '/ball',
+        text: 'edit   ',
+        user_id: 'U123',
+        user_name: 'alice',
+        channel_id: 'C_CURRENT',
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body).response_type).toBe('ephemeral');
+    expect(postMessage).not.toHaveBeenCalled();
+  });
 });

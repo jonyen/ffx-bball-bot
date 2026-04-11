@@ -59,6 +59,7 @@ async function handleEdit({
         lambda: 'slashCommand',
         phase: 'conversations.history',
         channel: channelId,
+        user: userId,
       },
     });
     return response(500, 'internal error');
@@ -84,6 +85,7 @@ async function handleEdit({
         phase: 'reactions.get',
         channel: channelId,
         ts,
+        user: userId,
       },
     });
     return response(500, 'internal error');
@@ -127,6 +129,7 @@ async function handleEdit({
         phase: 'chat.update',
         channel: channelId,
         ts,
+        user: userId,
       },
     });
     return response(500, 'internal error');

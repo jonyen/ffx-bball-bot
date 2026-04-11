@@ -2,44 +2,17 @@ import { describe, test, expect } from 'vitest';
 import { parseScheduleInput } from '../src/shared/scheduleParser.js';
 
 describe('parseScheduleInput', () => {
-  describe('raw AWS expressions', () => {
-    test('cron(...) is returned verbatim', () => {
-      expect(parseScheduleInput('cron(0 8 ? * TUE,THU *)')).toEqual({
-        expression: 'cron(0 8 ? * TUE,THU *)',
-        summary: 'cron(0 8 ? * TUE,THU *)',
-        kind: 'raw',
-      });
+  describe('raw cron/rate/at expressions are no longer accepted', () => {
+    test('cron(...) is rejected', () => {
+      expect(() => parseScheduleInput('cron(0 8 ? * TUE,THU *)')).toThrow();
     });
 
-    test('rate(...) passes through', () => {
-      expect(parseScheduleInput('rate(1 hour)').expression).toBe('rate(1 hour)');
-      expect(parseScheduleInput('rate(1 hour)').kind).toBe('raw');
+    test('rate(...) is rejected', () => {
+      expect(() => parseScheduleInput('rate(1 hour)')).toThrow();
     });
 
-    test('at(...) passes through', () => {
-      expect(parseScheduleInput('at(2026-04-11T08:00:00)').expression).toBe(
-        'at(2026-04-11T08:00:00)',
-      );
-    });
-  });
-
-  describe('bare cron', () => {
-    test('six-field expression is wrapped', () => {
-      expect(parseScheduleInput('0 8 ? * TUE,THU *').expression).toBe(
-        'cron(0 8 ? * TUE,THU *)',
-      );
-      expect(parseScheduleInput('0 8 ? * TUE,THU *').kind).toBe('cron');
-    });
-
-    test('slashes, dashes, and commas are allowed', () => {
-      expect(parseScheduleInput('0 */2 ? * MON-FRI *').expression).toBe(
-        'cron(0 */2 ? * MON-FRI *)',
-      );
-    });
-
-    test('five fields are NOT treated as bare cron', () => {
-      // "every Tue at 8am" is 4 fields; "at 0 8 ? TUE *" is 5 → neither matches
-      expect(() => parseScheduleInput('0 8 ? * TUE')).toThrow();
+    test('bare six-field cron is rejected', () => {
+      expect(() => parseScheduleInput('0 8 ? * TUE,THU *')).toThrow();
     });
   });
 
@@ -48,7 +21,6 @@ describe('parseScheduleInput', () => {
       const r = parseScheduleInput('every Tuesday and Thursday at 8am');
       expect(r.expression).toBe('cron(0 8 ? * TUE,THU *)');
       expect(r.summary).toBe('every TUE, THU at 8am');
-      expect(r.kind).toBe('natural');
     });
 
     test('every weekday at 9:30am → MON-FRI', () => {

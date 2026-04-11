@@ -9,12 +9,22 @@ import {
   getChannelHistory,
   getReactions,
   updateMessage,
+  deleteMessage,
 } from '../shared/slack.js';
 import { getSchedule, updateSchedule } from '../shared/scheduler.js';
 import { parseScheduleInput } from '../shared/scheduleParser.js';
 
 const EMPTY_ROSTER = { in: [], out: [], unsure: [] };
 const WEATHER_TIMEOUT_MS = 2000;
+
+const USAGE_HELP = [
+  '*Usage*',
+  '• `/ball <message>` — post a new bball message',
+  '• `/ball edit <message>` — edit the most recent bball message',
+  '• `/ball delete` — delete the most recent bball message',
+  '• `/ball schedule` — show the current schedule',
+  '• `/ball schedule <natural>` — update the schedule (e.g. `every Tue, Thu at 8am`)',
+].join('\n');
 
 function response(statusCode, body = '', headers) {
   return { statusCode, body, headers };
@@ -50,10 +60,6 @@ function formatScheduleView({ scheduleName, current }) {
     '• `/ball schedule every Tue, Thu at 8am`',
     '• `/ball schedule every weekday at 9:30am`',
     '• `/ball schedule every day at noon`',
-    '',
-    'Or pass a raw cron/rate expression — e.g.',
-    '• `/ball schedule 0 7 ? * MON,WED,FRI *`',
-    '• `/ball schedule cron(30 17 ? * FRI *)`',
   ].join('\n');
 }
 
@@ -62,7 +68,6 @@ const PARSE_HELP = [
   '• `/ball schedule every Tue, Thu at 8am`',
   '• `/ball schedule every weekday at 9:30am`',
   '• `/ball schedule every day at noon`',
-  '• `/ball schedule cron(0 8 ? * TUE,THU *)`',
 ].join('\n');
 
 async function handleSchedule({
@@ -134,13 +139,59 @@ async function handleSchedule({
   }
 
   const tz = current.ScheduleExpressionTimezone ?? 'UTC';
-  const lines = [`✅ Schedule updated.`, `• Expression: \`${newExpression}\``];
-  if (parsed.kind === 'natural') {
-    lines.push(`• Interpreted as: ${parsed.summary} (${tz})`);
-  } else {
-    lines.push(`• Timezone: ${tz}`);
+  return ephemeral(
+    [
+      `✅ Schedule updated.`,
+      `• Expression: \`${newExpression}\``,
+      `• Interpreted as: ${parsed.summary} (${tz})`,
+    ].join('\n'),
+  );
+}
+
+async function handleDelete({ token, botUserId, channelId, userId }) {
+  if (!channelId) {
+    return ephemeral('Could not determine the current channel.');
   }
-  return ephemeral(lines.join('\n'));
+
+  let history;
+  try {
+    history = await getChannelHistory({ token, channel: channelId, limit: 20 });
+  } catch (err) {
+    await notifyFailure({
+      token,
+      error: err,
+      context: {
+        lambda: 'slashCommand',
+        phase: 'conversations.history',
+        channel: channelId,
+        user: userId,
+      },
+    });
+    return response(500, 'internal error');
+  }
+
+  const target = (history.messages ?? []).find((m) => m.user === botUserId);
+  if (!target) {
+    return ephemeral('No recent bball message to delete in this channel.');
+  }
+
+  try {
+    await deleteMessage({ token, channel: channelId, ts: target.ts });
+    return ephemeral('🗑️ Deleted the most recent bball message.');
+  } catch (err) {
+    await notifyFailure({
+      token,
+      error: err,
+      context: {
+        lambda: 'slashCommand',
+        phase: 'chat.delete',
+        channel: channelId,
+        ts: target.ts,
+        user: userId,
+      },
+    });
+    return ephemeral(`Delete failed: ${err.message}`);
+  }
 }
 
 async function handleEdit({
@@ -264,7 +315,7 @@ export async function handler(event) {
   const channelId = params.get('channel_id') ?? '';
 
   if (!text) {
-    return ephemeral('Usage: `/ball <message>` — e.g. `/ball tonight at 7pm, outdoor courts`');
+    return ephemeral(USAGE_HELP);
   }
 
   const scheduleMatch = /^schedule(\s+(.*))?$/i.exec(text);
@@ -276,6 +327,15 @@ export async function handler(event) {
       scheduleName: process.env.SCHEDULE_NAME ?? '',
       scheduleGroup: process.env.SCHEDULE_GROUP ?? 'default',
       scheduleText,
+    });
+  }
+
+  if (/^delete\s*$/i.test(text)) {
+    return handleDelete({
+      token,
+      botUserId: process.env.SLACK_BOT_USER_ID,
+      channelId,
+      userId,
     });
   }
 

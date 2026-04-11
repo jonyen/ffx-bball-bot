@@ -584,14 +584,14 @@ describe('slashCommand handler', () => {
       expect(body.text).toContain('ffx-bball-post-schedule');
     });
 
-    test('`/ball schedule <bare cron>` wraps with cron(...) and calls updateSchedule with preserved fields', async () => {
+    test('`/ball schedule <natural>` calls updateSchedule with preserved fields', async () => {
       getSchedule.mockResolvedValue(currentSchedule);
       updateSchedule.mockResolvedValue({});
 
       const res = await handler(
         event({
           command: '/ball',
-          text: 'schedule 0 7 ? * MON,WED,FRI *',
+          text: 'schedule every mon,wed,fri at 7am',
           user_id: 'U123',
           user_name: 'alice',
           channel_id: 'C_CURRENT',
@@ -615,11 +615,10 @@ describe('slashCommand handler', () => {
       expect(body.text).toContain('cron(0 7 ? * MON,WED,FRI *)');
     });
 
-    test('`/ball schedule cron(...)` keeps an already-wrapped expression verbatim', async () => {
+    test('`/ball schedule cron(...)` is rejected (raw expressions no longer supported)', async () => {
       getSchedule.mockResolvedValue(currentSchedule);
-      updateSchedule.mockResolvedValue({});
 
-      await handler(
+      const res = await handler(
         event({
           command: '/ball',
           text: 'schedule cron(30 17 ? * FRI *)',
@@ -629,28 +628,11 @@ describe('slashCommand handler', () => {
         }),
       );
 
-      expect(updateSchedule.mock.calls[0][0].scheduleExpression).toBe(
-        'cron(30 17 ? * FRI *)',
-      );
-    });
-
-    test('`/ball schedule rate(...)` is accepted verbatim too', async () => {
-      getSchedule.mockResolvedValue(currentSchedule);
-      updateSchedule.mockResolvedValue({});
-
-      await handler(
-        event({
-          command: '/ball',
-          text: 'schedule rate(2 hours)',
-          user_id: 'U123',
-          user_name: 'alice',
-          channel_id: 'C_CURRENT',
-        }),
-      );
-
-      expect(updateSchedule.mock.calls[0][0].scheduleExpression).toBe(
-        'rate(2 hours)',
-      );
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toMatch(/couldn't parse/i);
+      expect(updateSchedule).not.toHaveBeenCalled();
     });
 
     test('`/ball schedule` returns ephemeral error and notifies when getSchedule throws', async () => {
@@ -680,14 +662,14 @@ describe('slashCommand handler', () => {
       expect(updateSchedule).not.toHaveBeenCalled();
     });
 
-    test('`/ball schedule <cron>` returns ephemeral error and notifies when updateSchedule throws', async () => {
+    test('`/ball schedule <natural>` returns ephemeral error and notifies when updateSchedule throws', async () => {
       getSchedule.mockResolvedValue(currentSchedule);
       updateSchedule.mockRejectedValue(new Error('ValidationException: bad cron'));
 
       const res = await handler(
         event({
           command: '/ball',
-          text: 'schedule 99 99 * * * *',
+          text: 'schedule every fri at 5pm',
           user_id: 'U123',
           user_name: 'alice',
           channel_id: 'C_CURRENT',
@@ -703,7 +685,7 @@ describe('slashCommand handler', () => {
       expect(notifyFailure).toHaveBeenCalledTimes(1);
       const ctx = notifyFailure.mock.calls[0][0].context;
       expect(ctx.phase).toBe('scheduler.updateSchedule');
-      expect(ctx.scheduleExpression).toBe('cron(99 99 * * * *)');
+      expect(ctx.scheduleExpression).toBe('cron(0 17 ? * FRI *)');
       expect(ctx.user).toBe('U123');
     });
 
@@ -856,24 +838,5 @@ describe('slashCommand handler', () => {
       expect(notifyFailure).not.toHaveBeenCalled();
     });
 
-    test('cron-kind updates show timezone (not "Interpreted as")', async () => {
-      getSchedule.mockResolvedValue(currentSchedule);
-      updateSchedule.mockResolvedValue({});
-
-      const res = await handler(
-        event({
-          command: '/ball',
-          text: 'schedule 0 7 ? * MON,WED,FRI *',
-          user_id: 'U123',
-          user_name: 'alice',
-          channel_id: 'C_CURRENT',
-        }),
-      );
-
-      const body = JSON.parse(res.body);
-      expect(body.text).toContain('cron(0 7 ? * MON,WED,FRI *)');
-      expect(body.text).toContain('Timezone: America/New_York');
-      expect(body.text).not.toMatch(/interpreted as/i);
-    });
   });
 });

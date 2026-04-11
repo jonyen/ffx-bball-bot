@@ -204,6 +204,7 @@ export async function handler(event) {
 
   const body = formatMessage(EMPTY_ROSTER, weather, { headerText });
 
+  // Fanout pattern mirrors postMessage/handler.js. If you fix a bug here, check there too.
   const results = await Promise.allSettled(
     channels.map((channel) => postMessage({ token, channel, text: body })),
   );

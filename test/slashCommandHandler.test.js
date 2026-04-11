@@ -516,4 +516,28 @@ describe('slashCommand handler', () => {
     expect(notifyFailure.mock.calls[0][0].context.user).toBe('U123');
     expect(updateMessage).not.toHaveBeenCalled();
   });
+
+  test('`/ball edit` notifies failure and returns 500 when reactions.get throws', async () => {
+    getChannelHistory.mockResolvedValue({
+      ok: true,
+      messages: [{ user: 'U_BOT', ts: '2.0', text: '🏀 tonight (Alice)' }],
+    });
+    getReactions.mockRejectedValue(new Error('slack down'));
+
+    const res = await handler(
+      event({
+        command: '/ball',
+        text: 'edit 8pm',
+        user_id: 'U123',
+        user_name: 'alice',
+        channel_id: 'C_CURRENT',
+      }),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(notifyFailure).toHaveBeenCalledTimes(1);
+    expect(notifyFailure.mock.calls[0][0].context.phase).toBe('reactions.get');
+    expect(notifyFailure.mock.calls[0][0].context.user).toBe('U123');
+    expect(updateMessage).not.toHaveBeenCalled();
+  });
 });

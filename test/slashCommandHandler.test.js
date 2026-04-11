@@ -14,13 +14,23 @@ vi.mock('../src/shared/slack.js', () => ({
   getUserInfo: vi.fn(),
   notifyFailure: vi.fn(),
   parseChannels: (v) => (v ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  getChannelHistory: vi.fn(),
+  getReactions: vi.fn(),
+  updateMessage: vi.fn(),
   FAILURE_DM_USER: 'U0000000000',
 }));
 
 import { handler } from '../src/slashCommand/handler.js';
 import { verifySignature } from '../src/reactionHandler/verifySignature.js';
 import { fetchWeather } from '../src/postMessage/weather.js';
-import { postMessage, getUserInfo, notifyFailure } from '../src/shared/slack.js';
+import {
+  postMessage,
+  getUserInfo,
+  notifyFailure,
+  getChannelHistory,
+  getReactions,
+  updateMessage,
+} from '../src/shared/slack.js';
 
 function userInfoResponse({ display_name = '', real_name = '' } = {}) {
   return { ok: true, user: { id: 'U123', name: 'alice', profile: { display_name, real_name } } };
@@ -48,6 +58,7 @@ beforeEach(() => {
   process.env.SLACK_CHANNELS = 'C_TEST';
   delete process.env.SLACK_CHANNEL;
   process.env.OPENWEATHERMAP_API_KEY = 'owm-key';
+  process.env.SLACK_BOT_USER_ID = 'U_BOT';
   verifySignature.mockReturnValue(true);
   getUserInfo.mockResolvedValue(userInfoResponse({ display_name: 'Alice' }));
 });
@@ -360,5 +371,73 @@ describe('slashCommand handler', () => {
     expect(res.statusCode).toBe(200);
     expect(JSON.parse(res.body).response_type).toBe('ephemeral');
     expect(postMessage).not.toHaveBeenCalled();
+  });
+
+  test('`/ball edit <text>` updates the most recent bot message with preserved roster', async () => {
+    process.env.SLACK_CHANNELS = 'C_ONE,C_TWO';
+    getChannelHistory.mockResolvedValue({
+      ok: true,
+      messages: [
+        { user: 'U_HUMAN', ts: '3.0', text: 'hi' },
+        { user: 'U_BOT', ts: '2.0', text: '🏀 tonight at 7pm (Alice)\n\nIn (1): <@U_HUMAN>' },
+        { user: 'U_BOT', ts: '1.0', text: '🏀 yesterday (Alice)' },
+      ],
+    });
+    getReactions.mockResolvedValue({
+      ok: true,
+      message: {
+        reactions: [
+          { name: 'basketball', users: ['U_HUMAN'], count: 1 },
+        ],
+      },
+    });
+    fetchWeather.mockResolvedValue({ icon: '☀️', tempF: 70, description: 'Clear sky' });
+    updateMessage.mockResolvedValue({ ok: true });
+
+    const res = await handler(
+      event({
+        command: '/ball',
+        text: 'edit 8pm instead',
+        user_id: 'U123',
+        user_name: 'alice',
+        channel_id: 'C_CURRENT',
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+
+    // Only the origin channel is read.
+    expect(getChannelHistory).toHaveBeenCalledTimes(1);
+    expect(getChannelHistory).toHaveBeenCalledWith({
+      token: 'xoxb-test',
+      channel: 'C_CURRENT',
+      limit: 20,
+    });
+
+    // Reactions fetched for the matched ts.
+    expect(getReactions).toHaveBeenCalledWith({
+      token: 'xoxb-test',
+      channel: 'C_CURRENT',
+      ts: '2.0',
+    });
+
+    // Weather re-fetched with the `now` target.
+    expect(fetchWeather).toHaveBeenCalledWith('owm-key', {
+      timeoutMs: 2000,
+      target: 'now',
+    });
+
+    // chat.update called exactly once, only on the origin channel.
+    expect(updateMessage).toHaveBeenCalledTimes(1);
+    const call = updateMessage.mock.calls[0][0];
+    expect(call.channel).toBe('C_CURRENT');
+    expect(call.ts).toBe('2.0');
+    expect(call.text).toBe(
+      '🏀 8pm instead (Alice)\n\nIn (1): <@U_HUMAN>\n\n──────────────\n☀️ Fairfax, VA — 70°F, Clear sky',
+    );
+
+    // Create-flow side effects never fire.
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(notifyFailure).not.toHaveBeenCalled();
   });
 });

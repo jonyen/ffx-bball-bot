@@ -20,6 +20,18 @@ vi.mock('../src/shared/slack.js', () => ({
   FAILURE_DM_USER: 'U05SWHWFTEH',
 }));
 
+vi.mock('../src/shared/scheduler.js', () => ({
+  getSchedule: vi.fn(),
+  updateSchedule: vi.fn(),
+  // Mirror the real implementation so behavior stays in sync with scheduler.js.
+  normalizeScheduleExpression: (text) => {
+    const trimmed = (text ?? '').trim();
+    if (!trimmed) return '';
+    if (/^(cron|rate|at)\s*\(/i.test(trimmed)) return trimmed;
+    return `cron(${trimmed})`;
+  },
+}));
+
 import { handler } from '../src/slashCommand/handler.js';
 import { verifySignature } from '../src/reactionHandler/verifySignature.js';
 import { fetchWeather } from '../src/postMessage/weather.js';
@@ -31,6 +43,7 @@ import {
   getReactions,
   updateMessage,
 } from '../src/shared/slack.js';
+import { getSchedule, updateSchedule } from '../src/shared/scheduler.js';
 
 function userInfoResponse({ display_name = '', real_name = '' } = {}) {
   return { ok: true, user: { id: 'U123', name: 'alice', profile: { display_name, real_name } } };
@@ -59,6 +72,8 @@ beforeEach(() => {
   delete process.env.SLACK_CHANNEL;
   process.env.OPENWEATHERMAP_API_KEY = 'owm-key';
   process.env.SLACK_BOT_USER_ID = 'U_BOT';
+  process.env.SCHEDULE_NAME = 'ffx-bball-post-schedule';
+  process.env.SCHEDULE_GROUP = 'default';
   verifySignature.mockReturnValue(true);
   getUserInfo.mockResolvedValue(userInfoResponse({ display_name: 'Alice' }));
 });
@@ -528,5 +543,211 @@ describe('slashCommand handler', () => {
     expect(notifyFailure.mock.calls[0][0].context.phase).toBe('reactions.get');
     expect(notifyFailure.mock.calls[0][0].context.user).toBe('U123');
     expect(updateMessage).not.toHaveBeenCalled();
+  });
+
+  describe('/ball schedule', () => {
+    const currentSchedule = {
+      Name: 'ffx-bball-post-schedule',
+      GroupName: 'default',
+      ScheduleExpression: 'cron(0 8 ? * TUE,THU *)',
+      ScheduleExpressionTimezone: 'America/New_York',
+      State: 'ENABLED',
+      FlexibleTimeWindow: { Mode: 'OFF' },
+      Target: {
+        Arn: 'arn:aws:lambda:us-east-1:123:function:ffx-bball-post-message',
+        RoleArn: 'arn:aws:iam::123:role/PostScheduleRole',
+      },
+    };
+
+    test('`/ball schedule` (no args) shows the current schedule ephemerally', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      expect(getSchedule).toHaveBeenCalledWith({
+        name: 'ffx-bball-post-schedule',
+        groupName: 'default',
+      });
+      expect(updateSchedule).not.toHaveBeenCalled();
+      expect(postMessage).not.toHaveBeenCalled();
+
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toContain('cron(0 8 ? * TUE,THU *)');
+      expect(body.text).toContain('America/New_York');
+      expect(body.text).toContain('ENABLED');
+      expect(body.text).toContain('ffx-bball-post-schedule');
+    });
+
+    test('`/ball schedule <bare cron>` wraps with cron(...) and calls updateSchedule with preserved fields', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+      updateSchedule.mockResolvedValue({});
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule 0 7 ? * MON,WED,FRI *',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      expect(updateSchedule).toHaveBeenCalledTimes(1);
+      const call = updateSchedule.mock.calls[0][0];
+      expect(call.name).toBe('ffx-bball-post-schedule');
+      expect(call.groupName).toBe('default');
+      expect(call.scheduleExpression).toBe('cron(0 7 ? * MON,WED,FRI *)');
+      expect(call.scheduleExpressionTimezone).toBe('America/New_York');
+      expect(call.flexibleTimeWindow).toEqual({ Mode: 'OFF' });
+      expect(call.target).toEqual(currentSchedule.Target);
+      expect(call.state).toBe('ENABLED');
+
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toMatch(/updated/i);
+      expect(body.text).toContain('cron(0 7 ? * MON,WED,FRI *)');
+    });
+
+    test('`/ball schedule cron(...)` keeps an already-wrapped expression verbatim', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+      updateSchedule.mockResolvedValue({});
+
+      await handler(
+        event({
+          command: '/ball',
+          text: 'schedule cron(30 17 ? * FRI *)',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(updateSchedule.mock.calls[0][0].scheduleExpression).toBe(
+        'cron(30 17 ? * FRI *)',
+      );
+    });
+
+    test('`/ball schedule rate(...)` is accepted verbatim too', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+      updateSchedule.mockResolvedValue({});
+
+      await handler(
+        event({
+          command: '/ball',
+          text: 'schedule rate(2 hours)',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(updateSchedule.mock.calls[0][0].scheduleExpression).toBe(
+        'rate(2 hours)',
+      );
+    });
+
+    test('`/ball schedule` returns ephemeral error and notifies when getSchedule throws', async () => {
+      getSchedule.mockRejectedValue(new Error('AccessDenied'));
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toMatch(/couldn't fetch schedule/i);
+      expect(body.text).toContain('AccessDenied');
+
+      expect(notifyFailure).toHaveBeenCalledTimes(1);
+      const ctx = notifyFailure.mock.calls[0][0].context;
+      expect(ctx.lambda).toBe('slashCommand');
+      expect(ctx.phase).toBe('scheduler.getSchedule');
+      expect(ctx.user).toBe('U123');
+      expect(updateSchedule).not.toHaveBeenCalled();
+    });
+
+    test('`/ball schedule <cron>` returns ephemeral error and notifies when updateSchedule throws', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+      updateSchedule.mockRejectedValue(new Error('ValidationException: bad cron'));
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule 99 99 * * * *',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toMatch(/schedule update failed/i);
+      expect(body.text).toContain('ValidationException');
+
+      expect(notifyFailure).toHaveBeenCalledTimes(1);
+      const ctx = notifyFailure.mock.calls[0][0].context;
+      expect(ctx.phase).toBe('scheduler.updateSchedule');
+      expect(ctx.scheduleExpression).toBe('cron(99 99 * * * *)');
+      expect(ctx.user).toBe('U123');
+    });
+
+    test('`/ball schedule` with SCHEDULE_NAME unset returns an ephemeral config error', async () => {
+      delete process.env.SCHEDULE_NAME;
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toMatch(/SCHEDULE_NAME/);
+      expect(getSchedule).not.toHaveBeenCalled();
+      expect(updateSchedule).not.toHaveBeenCalled();
+    });
+
+    test('`/ball schedule   ` (whitespace-only args) is treated as view', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule   ',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      expect(getSchedule).toHaveBeenCalledTimes(1);
+      expect(updateSchedule).not.toHaveBeenCalled();
+    });
   });
 });

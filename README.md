@@ -43,6 +43,30 @@ To fix a typo or change the time after posting, run:
 
 This rewrites the most recent bball message in the current channel with the new header text, preserving the current reactions (In/Out/Unsure) and refreshing the weather for "now". It only touches the channel where the command is run — other channels in `SLACK_CHANNELS` are left alone.
 
+### Viewing and updating the scheduled post
+
+```
+/ball schedule
+```
+
+Shows the current EventBridge schedule that drives the twice-weekly post (expression, timezone, enabled state) as an ephemeral message. Update it with:
+
+```
+/ball schedule <cron expression>
+```
+
+Examples:
+
+```
+/ball schedule 0 7 ? * MON,WED,FRI *        # bare cron — auto-wrapped
+/ball schedule cron(30 17 ? * FRI *)        # already-wrapped cron
+/ball schedule rate(1 day)                  # rate expressions also accepted
+```
+
+The command calls `scheduler:GetSchedule` and `scheduler:UpdateSchedule` on the stack's `ffx-bball-post-schedule`, preserving the target, role, flexible-window config, and timezone. Only the expression changes.
+
+> **Note:** runtime changes made via `/ball schedule` live on the EventBridge schedule, but the SAM template still carries the original `ScheduleExpression` default. The next `sam deploy` will reset the schedule to whatever is in `infra/template.yaml` unless you also update that file (or pass `--parameter-overrides`).
+
 ## Reactions
 
 | Emoji | Category |
@@ -69,6 +93,7 @@ src/
   shared/
     slack.js         # Slack API client + notifyFailure
     formatMessage.js # shared message formatter (+ parseHeader, parseWeatherLine)
+    scheduler.js     # EventBridge Scheduler client for /ball schedule
 test/                # vitest
 infra/
   template.yaml      # AWS SAM
@@ -109,6 +134,8 @@ After the first deploy:
 3. Invite the bot to the target channel.
 
 Required bot token scopes: `chat:write`, `reactions:read`, `channels:history`, `groups:history`, `commands`, `users:read`.
+
+The slash command Lambda also needs IAM permissions to manage the schedule (`scheduler:GetSchedule`, `scheduler:UpdateSchedule`, `iam:PassRole` on the scheduler role) — these are attached automatically by the SAM template.
 
 ## Notes
 

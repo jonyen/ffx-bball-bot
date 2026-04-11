@@ -58,6 +58,13 @@ export function getHistory({ token, channel, ts }) {
   });
 }
 
+export function getChannelHistory({ token, channel, limit = 20 }) {
+  return callGet('conversations.history', token, {
+    channel,
+    limit: String(limit),
+  });
+}
+
 export function getReactions({ token, channel, ts }) {
   return callGet('reactions.get', token, { channel, timestamp: ts });
 }

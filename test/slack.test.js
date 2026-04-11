@@ -3,6 +3,7 @@ import {
   postMessage,
   updateMessage,
   getHistory,
+  getChannelHistory,
   getReactions,
   notifyFailure,
   FAILURE_DM_USER,
@@ -170,6 +171,45 @@ describe('notifyFailure', () => {
     await notifyFailure({ token: TOKEN, error: 'plain string failure', context: {} });
     const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
     expect(body.text).toContain('plain string failure');
+  });
+});
+
+describe('getChannelHistory', () => {
+  test('GETs conversations.history with channel and limit', async () => {
+    globalThis.fetch.mockResolvedValue(
+      slackOk({
+        messages: [
+          { user: 'U_BOT', ts: '2.0', text: '🏀 earlier' },
+          { user: 'U_HUMAN', ts: '1.0', text: 'hey' },
+        ],
+      }),
+    );
+
+    const result = await getChannelHistory({ token: TOKEN, channel: 'C1', limit: 20 });
+
+    expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    const url = globalThis.fetch.mock.calls[0][0];
+    expect(url).toContain('conversations.history');
+    expect(url).toContain('channel=C1');
+    expect(url).toContain('limit=20');
+    expect(result.messages).toHaveLength(2);
+  });
+
+  test('defaults limit to 20 when not provided', async () => {
+    globalThis.fetch.mockResolvedValue(slackOk({ messages: [] }));
+
+    await getChannelHistory({ token: TOKEN, channel: 'C1' });
+
+    const url = globalThis.fetch.mock.calls[0][0];
+    expect(url).toContain('limit=20');
+  });
+
+  test('throws when Slack returns not-ok', async () => {
+    globalThis.fetch.mockResolvedValue(slackErr('channel_not_found'));
+
+    await expect(
+      getChannelHistory({ token: TOKEN, channel: 'CX' }),
+    ).rejects.toThrow(/channel_not_found/);
   });
 });
 

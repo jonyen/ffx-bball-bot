@@ -107,7 +107,8 @@ src/
     scheduleParser.js # natural-language → cron parser for /ball schedule
 test/                # vitest
 infra/
-  template.yaml      # AWS SAM
+  template.yaml      # AWS SAM — main app stack
+  github-oidc.yaml   # bootstrap stack — GitHub OIDC provider + deploy role
 ```
 
 ## Development
@@ -161,43 +162,31 @@ Concurrency is pinned to the stack name (`deploy-ffx-bball-bot`, `cancel-in-prog
 
 ### One-time AWS setup (OIDC)
 
-The workflow authenticates via GitHub OIDC — no long-lived AWS access keys.
+The workflow authenticates via GitHub OIDC — no long-lived AWS access keys. Everything you need is provisioned by a bootstrap CloudFormation stack (`infra/github-oidc.yaml`) plus a wrapper script that runs it for you:
 
-1. **Create the GitHub OIDC provider** in your AWS account (only needed once per account):
+```bash
+bash scripts/bootstrap-oidc.sh
+```
 
-   ```bash
-   aws iam create-open-id-connect-provider \
-     --url https://token.actions.githubusercontent.com \
-     --client-id-list sts.amazonaws.com \
-     --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
-   ```
+The script:
 
-2. **Create an IAM role** that the workflow assumes. Trust policy (replace `<ACCOUNT_ID>`):
+1. Checks for an existing GitHub OIDC identity provider in your account (they're account-global, so if you already have one for another repo, it's reused).
+2. Deploys the `ffx-bball-bot-github-oidc` CFN stack, which creates the deploy IAM role with a trust policy scoped to `repo:jonyen/ffx-bball-bot:*` — nobody else's workflow can assume it.
+3. Prints the role ARN you paste into the `AWS_DEPLOY_ROLE_ARN` GitHub secret.
 
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [{
-       "Effect": "Allow",
-       "Principal": {
-         "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
-       },
-       "Action": "sts:AssumeRoleWithWebIdentity",
-       "Condition": {
-         "StringEquals": {
-           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
-         },
-         "StringLike": {
-           "token.actions.githubusercontent.com:sub": "repo:jonyen/ffx-bball-bot:*"
-         }
-       }
-     }]
-   }
-   ```
+Overrides (env vars):
 
-   Attach a permissions policy. For simplicity, `AdministratorAccess` works to start; for least-privilege you'll need CloudFormation, S3 (SAM artifacts bucket), Lambda, API Gateway v2, IAM role create/pass, EventBridge Scheduler, and CloudWatch Logs. Note the `sub` condition scopes the trust to this repo only — anyone else's workflow can't assume the role.
+| Var | Default | Notes |
+|---|---|---|
+| `GITHUB_ORG` | `jonyen` | Override if you forked the repo. |
+| `GITHUB_REPO` | `ffx-bball-bot` | |
+| `REGION` | `us-east-1` | |
+| `STACK_NAME` | `ffx-bball-bot-github-oidc` | |
+| `SUB_FILTER` | `*` | Set to `environment:production` to only allow runs that target the production environment, or `ref:refs/heads/main` to lock to `main`. |
 
-3. **Copy the role ARN** — you'll paste it into GitHub next.
+Run it with an AWS identity that has IAM + CloudFormation permissions (your own admin user works for a one-shot bootstrap). The stack attaches `AdministratorAccess` to the deploy role by default — pragmatic for a personal project because SAM needs broad perms to create IAM roles, Lambda functions, API Gateway, the Scheduler resource, and CFN stacks. You can tighten to a custom managed policy later by editing `infra/github-oidc.yaml`.
+
+If you'd rather set this up by hand instead of running the script, the template at `infra/github-oidc.yaml` documents exactly what it creates and you can deploy it directly with `aws cloudformation deploy`.
 
 ### GitHub secrets
 

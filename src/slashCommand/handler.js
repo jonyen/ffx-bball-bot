@@ -24,6 +24,7 @@ const USAGE_HELP = [
   '• `/ball delete` — delete the most recent bball message',
   '• `/ball schedule` — show the current schedule',
   '• `/ball schedule <natural>` — update the schedule (e.g. `every Tue, Thu at 8am`)',
+  '• `/ball info` — show the deployed commit SHA',
 ].join('\n');
 
 function response(statusCode, body = '', headers) {
@@ -337,6 +338,11 @@ export async function handler(event) {
       channelId,
       userId,
     });
+  }
+
+  if (/^info\s*$/i.test(text)) {
+    const sha = process.env.GIT_SHA || 'unknown';
+    return ephemeral(`*bball bot*\n• Commit: \`${sha}\``);
   }
 
   const editMatch = /^edit(\s+(.*))?$/i.exec(text);

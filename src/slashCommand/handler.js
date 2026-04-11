@@ -24,6 +24,8 @@ const USAGE_HELP = [
   '• `/ball delete` — delete the most recent bball message',
   '• `/ball schedule` — show the current schedule',
   '• `/ball schedule <natural>` — update the schedule (e.g. `every Tue, Thu at 8am`)',
+  '• `/ball schedule pause` — pause the schedule',
+  '• `/ball schedule resume` — resume the schedule',
   '• `/ball info` — show the deployed commit SHA',
 ].join('\n');
 
@@ -61,6 +63,10 @@ function formatScheduleView({ scheduleName, current }) {
     '• `/ball schedule every Tue, Thu at 8am`',
     '• `/ball schedule every weekday at 9:30am`',
     '• `/ball schedule every day at noon`',
+    '',
+    'Pause or resume:',
+    '• `/ball schedule pause`',
+    '• `/ball schedule resume`',
   ].join('\n');
 }
 
@@ -103,6 +109,37 @@ async function handleSchedule({
 
   if (!scheduleText) {
     return ephemeral(formatScheduleView({ scheduleName, current }));
+  }
+
+  const toggle = /^(pause|resume)$/i.exec(scheduleText);
+  if (toggle) {
+    const newState = toggle[1].toLowerCase() === 'pause' ? 'DISABLED' : 'ENABLED';
+    try {
+      await updateSchedule({
+        name: scheduleName,
+        groupName: scheduleGroup,
+        scheduleExpression: current.ScheduleExpression,
+        scheduleExpressionTimezone: current.ScheduleExpressionTimezone,
+        flexibleTimeWindow: current.FlexibleTimeWindow,
+        target: current.Target,
+        state: newState,
+      });
+    } catch (err) {
+      await notifyFailure({
+        token,
+        error: err,
+        context: {
+          lambda: 'slashCommand',
+          phase: 'scheduler.updateSchedule',
+          scheduleName,
+          state: newState,
+          user: userId,
+        },
+      });
+      return ephemeral(`Schedule update failed: ${err.message}`);
+    }
+    const verb = newState === 'DISABLED' ? '⏸️ Paused' : '▶️ Resumed';
+    return ephemeral(`${verb} bball schedule (*${scheduleName}*).`);
   }
 
   let parsed;

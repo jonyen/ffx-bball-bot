@@ -49,6 +49,10 @@ export function updateMessage({ token, channel, ts, text }) {
   return callPost('chat.update', token, { channel, ts, text });
 }
 
+export function deleteMessage({ token, channel, ts }) {
+  return callPost('chat.delete', token, { channel, ts });
+}
+
 export function getHistory({ token, channel, ts }) {
   return callGet('conversations.history', token, {
     channel,

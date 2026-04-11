@@ -1,17 +1,13 @@
 // Pure JS parser for /ball schedule input. No AWS SDK dependency so tests can
 // import it directly.
 //
-// Accepted forms:
-//   cron(0 8 ? * TUE,THU *)           → verbatim
-//   rate(1 hour)                      → verbatim
-//   at(2026-04-11T08:00:00)           → verbatim
-//   0 8 ? * TUE,THU *                 → wrapped as cron(...)
-//   every Tuesday and Thursday at 8am → natural language
+// Accepted forms (natural language only, à la /remind):
+//   every Tuesday and Thursday at 8am
 //   every weekday at 9:30am
 //   every day at noon
 //   mon,wed,fri at 7am
 //
-// Returns { expression, summary, kind }; throws on unparseable input with a
+// Returns { expression, summary }; throws on unparseable input with a
 // user-friendly message.
 
 const DAY_ALIASES = {
@@ -25,15 +21,6 @@ const DAY_ALIASES = {
 };
 
 const DOW_ORDER = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
-
-function looksLikeBareCron(text) {
-  const fields = text.split(/\s+/);
-  if (fields.length !== 6) return false;
-  if (!fields.every((f) => /^[0-9A-Z*?,/\-]+$/i.test(f))) return false;
-  // Require at least one cron-specific token so a six-word English sentence
-  // ("every Tuesday and Thursday at 8am") doesn't get mis-wrapped as cron(...).
-  return fields.some((f) => /[*?/\-]/.test(f));
-}
 
 function extractTime(text) {
   if (/\bnoon\b/.test(text)) return { hour: 12, minute: 0 };
@@ -146,7 +133,7 @@ function parseNatural(text) {
   const dowField = compactDayField(days);
   const expression = `cron(${time.minute} ${time.hour} ? * ${dowField} *)`;
   const summary = `${describeDays(dowField, days)} at ${formatTime(time)}`;
-  return { expression, summary, kind: 'natural' };
+  return { expression, summary };
 }
 
 export function parseScheduleInput(input) {
@@ -154,15 +141,5 @@ export function parseScheduleInput(input) {
   if (!trimmed) {
     throw new Error('Schedule expression is empty.');
   }
-
-  if (/^(cron|rate|at)\s*\(/i.test(trimmed)) {
-    return { expression: trimmed, summary: trimmed, kind: 'raw' };
-  }
-
-  if (looksLikeBareCron(trimmed)) {
-    const expression = `cron(${trimmed})`;
-    return { expression, summary: expression, kind: 'cron' };
-  }
-
   return parseNatural(trimmed);
 }

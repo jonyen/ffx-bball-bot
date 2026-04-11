@@ -73,6 +73,13 @@ function formatError(error) {
   return String(error);
 }
 
+export function parseChannels(envValue) {
+  return (envValue ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
 export async function notifyFailure({ token, error, context }) {
   try {
     const ctxLines = Object.entries(context ?? {})

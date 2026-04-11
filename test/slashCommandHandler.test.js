@@ -440,4 +440,80 @@ describe('slashCommand handler', () => {
     expect(postMessage).not.toHaveBeenCalled();
     expect(notifyFailure).not.toHaveBeenCalled();
   });
+
+  test('`/ball edit` with no bot message in recent history returns an ephemeral error', async () => {
+    getChannelHistory.mockResolvedValue({
+      ok: true,
+      messages: [
+        { user: 'U_HUMAN', ts: '3.0', text: 'hi' },
+        { user: 'U_OTHER', ts: '2.0', text: 'not a bot' },
+      ],
+    });
+
+    const res = await handler(
+      event({
+        command: '/ball',
+        text: 'edit 8pm',
+        user_id: 'U123',
+        user_name: 'alice',
+        channel_id: 'C_CURRENT',
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.response_type).toBe('ephemeral');
+    expect(body.text).toMatch(/no recent/i);
+    expect(updateMessage).not.toHaveBeenCalled();
+    expect(getReactions).not.toHaveBeenCalled();
+  });
+
+  test('`/ball edit` notifies failure and returns 500 when chat.update throws', async () => {
+    getChannelHistory.mockResolvedValue({
+      ok: true,
+      messages: [{ user: 'U_BOT', ts: '2.0', text: '🏀 tonight (Alice)' }],
+    });
+    getReactions.mockResolvedValue({ ok: true, message: { reactions: [] } });
+    fetchWeather.mockResolvedValue(null);
+    updateMessage.mockRejectedValue(new Error('slack down'));
+
+    const res = await handler(
+      event({
+        command: '/ball',
+        text: 'edit 8pm',
+        user_id: 'U123',
+        user_name: 'alice',
+        channel_id: 'C_CURRENT',
+      }),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(notifyFailure).toHaveBeenCalledTimes(1);
+    const ctx = notifyFailure.mock.calls[0][0].context;
+    expect(ctx.lambda).toBe('slashCommand');
+    expect(ctx.phase).toBe('chat.update');
+    expect(ctx.channel).toBe('C_CURRENT');
+    expect(ctx.ts).toBe('2.0');
+    expect(ctx.user).toBe('U123');
+  });
+
+  test('`/ball edit` notifies failure when conversations.history throws', async () => {
+    getChannelHistory.mockRejectedValue(new Error('slack down'));
+
+    const res = await handler(
+      event({
+        command: '/ball',
+        text: 'edit 8pm',
+        user_id: 'U123',
+        user_name: 'alice',
+        channel_id: 'C_CURRENT',
+      }),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(notifyFailure).toHaveBeenCalledTimes(1);
+    expect(notifyFailure.mock.calls[0][0].context.phase).toBe('conversations.history');
+    expect(notifyFailure.mock.calls[0][0].context.user).toBe('U123');
+    expect(updateMessage).not.toHaveBeenCalled();
+  });
 });

@@ -27,15 +27,47 @@ if [ ${#missing[@]} -gt 0 ]; then
   exit 1
 fi
 
+REGION=us-east-1
+SCHEDULE_NAME=ffx-bball-post-schedule
+
+# Preserve the live ScheduleExpression across deploys so that runtime changes
+# made via `/ball schedule` are not clobbered by the template default. On the
+# first deploy the schedule doesn't exist yet, so we fall back to the default.
+PARAMS="SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID OpenWeatherMapApiKey=$OPENWEATHERMAP_API_KEY SlackChannels=$SLACK_CHANNELS"
+
+SCHED_ERR="$(mktemp)"
+trap 'rm -f "$SCHED_ERR"' EXIT
+
+set +e
+CURRENT_EXPR=$(aws scheduler get-schedule \
+  --name "$SCHEDULE_NAME" \
+  --region "$REGION" \
+  --query 'ScheduleExpression' \
+  --output text 2>"$SCHED_ERR")
+GET_RC=$?
+set -e
+
+if [ $GET_RC -eq 0 ] && [ -n "$CURRENT_EXPR" ] && [ "$CURRENT_EXPR" != "None" ]; then
+  echo "Preserving live schedule expression: $CURRENT_EXPR"
+  PARAMS="$PARAMS ScheduleExpression=\"$CURRENT_EXPR\""
+elif grep -q "ResourceNotFoundException" "$SCHED_ERR"; then
+  echo "No existing schedule; using template default on first deploy."
+else
+  echo "Failed to read current schedule ($SCHEDULE_NAME in $REGION):" >&2
+  cat "$SCHED_ERR" >&2
+  echo "Aborting to avoid overwriting a live schedule. Fix credentials/permissions or delete the schedule to proceed." >&2
+  exit 1
+fi
+
 cd "$ROOT/infra"
 
 sam build
 
 sam deploy \
   --stack-name ffx-bball-bot \
-  --region us-east-1 \
+  --region "$REGION" \
   --capabilities CAPABILITY_IAM \
   --resolve-s3 \
   --no-confirm-changeset \
   --no-fail-on-empty-changeset \
-  --parameter-overrides "SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID OpenWeatherMapApiKey=$OPENWEATHERMAP_API_KEY SlackChannels=$SLACK_CHANNELS"
+  --parameter-overrides "$PARAMS"

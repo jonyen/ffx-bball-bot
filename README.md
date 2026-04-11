@@ -65,7 +65,7 @@ Examples:
 
 The command calls `scheduler:GetSchedule` and `scheduler:UpdateSchedule` on the stack's `ffx-bball-post-schedule`, preserving the target, role, flexible-window config, and timezone. Only the expression changes.
 
-> **Note:** runtime changes made via `/ball schedule` live on the EventBridge schedule, but the SAM template still carries the original `ScheduleExpression` default. The next `sam deploy` will reset the schedule to whatever is in `infra/template.yaml` unless you also update that file (or pass `--parameter-overrides`).
+**Persistence across deploys.** `scripts/deploy.sh` reads the current live `ScheduleExpression` from EventBridge Scheduler before each deploy and passes it as `--parameter-overrides ScheduleExpression=...`, so runtime changes made via `/ball schedule` survive `sam deploy`. On the very first deploy (when the schedule doesn't exist yet) the template default `cron(0 8 ? * TUE,THU *)` is used. If you run `sam deploy` manually without the wrapper script, pass `--parameter-overrides ScheduleExpression="<cron>"` yourself or the template default will overwrite the live value.
 
 ## Reactions
 

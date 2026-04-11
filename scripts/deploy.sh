@@ -4,16 +4,14 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
 
-if [ ! -f "$ROOT/.env" ]; then
-  echo "No .env file at $ROOT/.env" >&2
-  echo "Copy .env.example to .env and fill it in." >&2
-  exit 1
+# Local runs get their secrets from .env; CI (GitHub Actions) provides them
+# directly via repository secrets, so .env is optional.
+if [ -f "$ROOT/.env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source "$ROOT/.env"
+  set +a
 fi
-
-set -a
-# shellcheck disable=SC1091
-source "$ROOT/.env"
-set +a
 
 required=(SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SLACK_BOT_USER_ID OPENWEATHERMAP_API_KEY SLACK_CHANNELS)
 missing=()
@@ -23,7 +21,8 @@ for v in "${required[@]}"; do
   fi
 done
 if [ ${#missing[@]} -gt 0 ]; then
-  echo "Missing required env vars in .env: ${missing[*]}" >&2
+  echo "Missing required env vars: ${missing[*]}" >&2
+  echo "Set them in .env (local) or GitHub repo secrets (CI)." >&2
   exit 1
 fi
 

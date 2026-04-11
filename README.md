@@ -148,6 +148,74 @@ Required bot token scopes: `chat:write`, `reactions:read`, `channels:history`, `
 
 The slash command Lambda also needs IAM permissions to manage the schedule (`scheduler:GetSchedule`, `scheduler:UpdateSchedule`, `iam:PassRole` on the scheduler role) — these are attached automatically by the SAM template.
 
+## Deploy from GitHub Actions
+
+The `.github/workflows/deploy.yml` workflow runs `scripts/deploy.sh` on:
+
+- **push to `main`** — when any of `src/**`, `infra/**`, `scripts/deploy.sh`, `package*.json`, or the workflow file itself changes.
+- **manual `workflow_dispatch`** — from the Actions tab in GitHub.
+
+The workflow installs dependencies, runs `npm test` as a **pre-deploy gate** (broken suite → no deploy), installs the SAM CLI, authenticates to AWS via OIDC, and finally calls `scripts/deploy.sh` — so the live-schedule preservation described above is honored in CI too.
+
+Concurrency is pinned to the stack name (`deploy-ffx-bball-bot`, `cancel-in-progress: false`) so two deploys can't race CloudFormation.
+
+### One-time AWS setup (OIDC)
+
+The workflow authenticates via GitHub OIDC — no long-lived AWS access keys.
+
+1. **Create the GitHub OIDC provider** in your AWS account (only needed once per account):
+
+   ```bash
+   aws iam create-open-id-connect-provider \
+     --url https://token.actions.githubusercontent.com \
+     --client-id-list sts.amazonaws.com \
+     --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+   ```
+
+2. **Create an IAM role** that the workflow assumes. Trust policy (replace `<ACCOUNT_ID>`):
+
+   ```json
+   {
+     "Version": "2012-10-17",
+     "Statement": [{
+       "Effect": "Allow",
+       "Principal": {
+         "Federated": "arn:aws:iam::<ACCOUNT_ID>:oidc-provider/token.actions.githubusercontent.com"
+       },
+       "Action": "sts:AssumeRoleWithWebIdentity",
+       "Condition": {
+         "StringEquals": {
+           "token.actions.githubusercontent.com:aud": "sts.amazonaws.com"
+         },
+         "StringLike": {
+           "token.actions.githubusercontent.com:sub": "repo:jonyen/ffx-bball-bot:*"
+         }
+       }
+     }]
+   }
+   ```
+
+   Attach a permissions policy. For simplicity, `AdministratorAccess` works to start; for least-privilege you'll need CloudFormation, S3 (SAM artifacts bucket), Lambda, API Gateway v2, IAM role create/pass, EventBridge Scheduler, and CloudWatch Logs. Note the `sub` condition scopes the trust to this repo only — anyone else's workflow can't assume the role.
+
+3. **Copy the role ARN** — you'll paste it into GitHub next.
+
+### GitHub secrets
+
+In the repo → **Settings → Secrets and variables → Actions → New repository secret**, create:
+
+| Secret | Value |
+|---|---|
+| `AWS_DEPLOY_ROLE_ARN` | the IAM role ARN from step 3 above |
+| `SLACK_BOT_TOKEN` | `xoxb-…` |
+| `SLACK_SIGNING_SECRET` | signing secret |
+| `SLACK_BOT_USER_ID` | the bot's user ID |
+| `OPENWEATHERMAP_API_KEY` | OWM key |
+| `SLACK_CHANNELS` | comma-separated channel IDs |
+
+### Optional: production environment protection
+
+Create a `production` environment in **Settings → Environments** and add deploy-protection rules (required reviewers, wait timer, branch restrictions). The workflow already references `environment: production`, so the rules take effect automatically — no workflow change needed.
+
 ## Notes
 
 - **Scheduling:** the cron runs on EventBridge Scheduler with `ScheduleExpressionTimezone: America/New_York`, so 8:00 AM ET stays fixed year-round across DST transitions.

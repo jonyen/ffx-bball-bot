@@ -23,7 +23,7 @@ const USAGE_HELP = [
   '• `/ball edit <message>` — edit the most recent bball message',
   '• `/ball delete` — delete the most recent bball message',
   '• `/ball schedule` — show the current schedule',
-  '• `/ball schedule <natural>` — update the schedule (e.g. `every Tue, Thu at 8am`)',
+  '• `/ball schedule <desired schedule>` — update the schedule using natural language (e.g. `every Tue, Thu at 8am`)',
   '• `/ball schedule pause` — pause the schedule',
   '• `/ball schedule resume` — resume the schedule',
   '• `/ball info` — show the deployed commit SHA',

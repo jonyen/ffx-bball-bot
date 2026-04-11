@@ -40,12 +40,3 @@ export function updateSchedule({
     }),
   );
 }
-
-// Accepts bare cron bodies ("0 8 ? * TUE,THU *") and wraps them as cron(...).
-// Also accepts already-wrapped cron(...)/rate(...)/at(...) expressions verbatim.
-export function normalizeScheduleExpression(text) {
-  const trimmed = (text ?? '').trim();
-  if (!trimmed) return '';
-  if (/^(cron|rate|at)\s*\(/i.test(trimmed)) return trimmed;
-  return `cron(${trimmed})`;
-}

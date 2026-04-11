@@ -10,11 +10,8 @@ import {
   getReactions,
   updateMessage,
 } from '../shared/slack.js';
-import {
-  getSchedule,
-  updateSchedule,
-  normalizeScheduleExpression,
-} from '../shared/scheduler.js';
+import { getSchedule, updateSchedule } from '../shared/scheduler.js';
+import { parseScheduleInput } from '../shared/scheduleParser.js';
 
 const EMPTY_ROSTER = { in: [], out: [], unsure: [] };
 const WEATHER_TIMEOUT_MS = 2000;
@@ -49,10 +46,24 @@ function formatScheduleView({ scheduleName, current }) {
     `• Timezone: ${tz}`,
     `• State: ${state}`,
     '',
-    'Update with `/ball schedule <cron expression>` — e.g.',
-    '`/ball schedule 0 7 ? * MON,WED,FRI *`',
+    'Update with natural language (like `/remind`) — e.g.',
+    '• `/ball schedule every Tue, Thu at 8am`',
+    '• `/ball schedule every weekday at 9:30am`',
+    '• `/ball schedule every day at noon`',
+    '',
+    'Or pass a raw cron/rate expression — e.g.',
+    '• `/ball schedule 0 7 ? * MON,WED,FRI *`',
+    '• `/ball schedule cron(30 17 ? * FRI *)`',
   ].join('\n');
 }
+
+const PARSE_HELP = [
+  'Examples:',
+  '• `/ball schedule every Tue, Thu at 8am`',
+  '• `/ball schedule every weekday at 9:30am`',
+  '• `/ball schedule every day at noon`',
+  '• `/ball schedule cron(0 8 ? * TUE,THU *)`',
+].join('\n');
 
 async function handleSchedule({
   token,
@@ -88,7 +99,14 @@ async function handleSchedule({
     return ephemeral(formatScheduleView({ scheduleName, current }));
   }
 
-  const newExpression = normalizeScheduleExpression(scheduleText);
+  let parsed;
+  try {
+    parsed = parseScheduleInput(scheduleText);
+  } catch (err) {
+    return ephemeral(`Couldn't parse schedule: ${err.message}\n\n${PARSE_HELP}`);
+  }
+
+  const newExpression = parsed.expression;
 
   try {
     await updateSchedule({
@@ -116,13 +134,13 @@ async function handleSchedule({
   }
 
   const tz = current.ScheduleExpressionTimezone ?? 'UTC';
-  return ephemeral(
-    [
-      `✅ Schedule updated.`,
-      `• Expression: \`${newExpression}\``,
-      `• Timezone: ${tz}`,
-    ].join('\n'),
-  );
+  const lines = [`✅ Schedule updated.`, `• Expression: \`${newExpression}\``];
+  if (parsed.kind === 'natural') {
+    lines.push(`• Interpreted as: ${parsed.summary} (${tz})`);
+  } else {
+    lines.push(`• Timezone: ${tz}`);
+  }
+  return ephemeral(lines.join('\n'));
 }
 
 async function handleEdit({

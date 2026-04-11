@@ -6,6 +6,7 @@ import {
   getReactions,
   notifyFailure,
   FAILURE_DM_USER,
+  parseChannels,
 } from '../src/shared/slack.js';
 
 const TOKEN = 'xoxb-test';
@@ -169,5 +170,26 @@ describe('notifyFailure', () => {
     await notifyFailure({ token: TOKEN, error: 'plain string failure', context: {} });
     const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body);
     expect(body.text).toContain('plain string failure');
+  });
+});
+
+describe('parseChannels', () => {
+  test('splits a comma-separated list and trims whitespace', () => {
+    expect(parseChannels('C1,C2, C3 ')).toEqual(['C1', 'C2', 'C3']);
+  });
+
+  test('returns a single entry when there is no comma', () => {
+    expect(parseChannels('C1')).toEqual(['C1']);
+  });
+
+  test('drops empty entries from trailing or duplicate commas', () => {
+    expect(parseChannels('C1,,C2,')).toEqual(['C1', 'C2']);
+  });
+
+  test('returns an empty array for undefined, null, or empty input', () => {
+    expect(parseChannels(undefined)).toEqual([]);
+    expect(parseChannels(null)).toEqual([]);
+    expect(parseChannels('')).toEqual([]);
+    expect(parseChannels('   ')).toEqual([]);
   });
 });

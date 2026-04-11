@@ -103,7 +103,7 @@ export async function handler(event) {
     }
   }
 
-  if (failures.length === channels.length) {
+  if (failures.length === channels.length && channels.length > 0) {
     return response(500, 'internal error');
   }
 

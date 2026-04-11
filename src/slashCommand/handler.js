@@ -6,7 +6,6 @@ import {
   postMessage,
   getUserInfo,
   notifyFailure,
-  parseChannels,
   getChannelHistory,
   getReactions,
   updateMessage,
@@ -139,7 +138,6 @@ async function handleEdit({
 export async function handler(event) {
   const token = process.env.SLACK_BOT_TOKEN;
   const secret = process.env.SLACK_SIGNING_SECRET;
-  const channels = parseChannels(process.env.SLACK_CHANNELS);
   const owmKey = process.env.OPENWEATHERMAP_API_KEY;
 
   const rawBody = decodeBody(event);
@@ -154,6 +152,7 @@ export async function handler(event) {
   const text = (params.get('text') ?? '').trim();
   const userId = params.get('user_id') ?? '';
   const userName = params.get('user_name') ?? '';
+  const channelId = params.get('channel_id') ?? '';
 
   if (!text) {
     return ephemeral('Usage: `/ball <message>` — e.g. `/ball tonight at 7pm, outdoor courts`');
@@ -170,12 +169,16 @@ export async function handler(event) {
     return handleEdit({
       token,
       botUserId: process.env.SLACK_BOT_USER_ID,
-      channelId: params.get('channel_id') ?? '',
+      channelId,
       userId,
       userName,
       editText,
       owmKey,
     });
+  }
+
+  if (!channelId) {
+    return ephemeral('Could not determine the current channel.');
   }
 
   let displayName = userName;
@@ -204,40 +207,20 @@ export async function handler(event) {
 
   const body = formatMessage(EMPTY_ROSTER, weather, { headerText });
 
-  // Fanout pattern mirrors postMessage/handler.js. If you fix a bug here, check there too.
-  const results = await Promise.allSettled(
-    channels.map((channel) => postMessage({ token, channel, text: body })),
-  );
-
-  const failures = [];
-  for (let i = 0; i < results.length; i += 1) {
-    const result = results[i];
-    if (result.status === 'rejected') {
-      const channel = channels[i];
-      failures.push({ channel, error: result.reason });
-      await notifyFailure({
-        token,
-        error: result.reason,
-        context: {
-          lambda: 'slashCommand',
-          phase: 'chat.postMessage',
-          user: userId,
-          channel,
-        },
-      });
-    }
-  }
-
-  if (failures.length === channels.length && channels.length > 0) {
+  try {
+    await postMessage({ token, channel: channelId, text: body });
+    return response(200);
+  } catch (err) {
+    await notifyFailure({
+      token,
+      error: err,
+      context: {
+        lambda: 'slashCommand',
+        phase: 'chat.postMessage',
+        user: userId,
+        channel: channelId,
+      },
+    });
     return response(500, 'internal error');
   }
-
-  if (failures.length > 0) {
-    const okCount = channels.length - failures.length;
-    return ephemeral(
-      `Posted to ${okCount} of ${channels.length} channels. ${failures.length} failed (DM sent).`,
-    );
-  }
-
-  return response(200);
 }

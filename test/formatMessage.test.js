@@ -104,13 +104,20 @@ describe('formatMessage with raw weather line', () => {
 });
 
 describe('formatMessage with custom header', () => {
-  test('replaces the default header when headerText is supplied', () => {
+  test('uses the supplied header verbatim, with no auto-prepended emoji', () => {
     const msg = formatMessage(EMPTY, WEATHER, {
       headerText: 'tonight at 7pm? — <@U123>',
     });
     expect(msg).toBe(
-      '🏀 tonight at 7pm? — <@U123>\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky',
+      'tonight at 7pm? — <@U123>\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky',
     );
+  });
+
+  test('preserves a basketball already in the supplied header', () => {
+    const msg = formatMessage(EMPTY, null, {
+      headerText: '🏀 tonight at 7pm? — <@U123>',
+    });
+    expect(msg).toBe('🏀 tonight at 7pm? — <@U123>');
   });
 
   test('custom header with reactions and null weather', () => {
@@ -119,7 +126,7 @@ describe('formatMessage with custom header', () => {
       null,
       { headerText: 'pickup at the park' },
     );
-    expect(msg).toBe('🏀 pickup at the park\n\nIn (1): <@U1>');
+    expect(msg).toBe('pickup at the park\n\nIn (1): <@U1>');
   });
 
   test('empty headerText falls back to the default', () => {
@@ -134,31 +141,27 @@ describe('formatMessage with custom header', () => {
 });
 
 describe('parseHeader', () => {
-  test('extracts the default header text', () => {
-    expect(parseHeader('🏀 today?\n\n──────────────\n☀️ weather')).toBe('today?');
+  test('returns the first line of a multi-line message', () => {
+    expect(parseHeader('🏀 today?\n\n──────────────\n☀️ weather')).toBe('🏀 today?');
   });
 
-  test('extracts a custom slash-command header with attribution', () => {
+  test('preserves a custom slash-command header with attribution', () => {
     const msg =
       '🏀 tonight at 7pm? — <@U123>\n\nIn (1): <@U1>\n\n──────────────\n☀️ weather';
-    expect(parseHeader(msg)).toBe('tonight at 7pm? — <@U123>');
-  });
-
-  test('returns null when the first line does not start with the basketball emoji', () => {
-    expect(parseHeader('something else entirely')).toBeNull();
+    expect(parseHeader(msg)).toBe('🏀 tonight at 7pm? — <@U123>');
   });
 
   test('handles a single-line message with no trailing newline', () => {
-    expect(parseHeader('🏀 today?')).toBe('today?');
+    expect(parseHeader('🏀 today?')).toBe('🏀 today?');
   });
 
-  test('parses the :basketball: shortcode form that Slack stores', () => {
-    expect(parseHeader(':basketball: today?')).toBe('today?');
+  test('returns headers without a basketball emoji as-is', () => {
+    expect(parseHeader('tonight at 7pm (Alice)\n\nIn (1): <@U1>')).toBe(
+      'tonight at 7pm (Alice)',
+    );
   });
 
-  test('parses a custom header in shortcode form with attribution', () => {
-    const msg =
-      ':basketball: tonight at 7pm — <@U123>\n\nIn (1): <@U1>\n\n──────────────\n:sunny: weather';
-    expect(parseHeader(msg)).toBe('tonight at 7pm — <@U123>');
+  test('preserves the :basketball: shortcode form that Slack stores', () => {
+    expect(parseHeader(':basketball: today?')).toBe(':basketball: today?');
   });
 });

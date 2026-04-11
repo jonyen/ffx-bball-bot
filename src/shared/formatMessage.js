@@ -1,6 +1,4 @@
-const BALL = '🏀';
-const BALL_SHORTCODE = ':basketball:';
-const DEFAULT_HEADER_TEXT = 'today?';
+const DEFAULT_HEADER_TEXT = '🏀 today?';
 const DIVIDER = '──────────────';
 
 function weatherLine(weather) {
@@ -14,7 +12,7 @@ function mentions(users) {
 }
 
 export function formatMessage(roster, weather, { headerText } = {}) {
-  const header = `${BALL} ${headerText || DEFAULT_HEADER_TEXT}`;
+  const header = headerText || DEFAULT_HEADER_TEXT;
   const sections = [header];
 
   const rosterLines = [];
@@ -39,9 +37,5 @@ export function parseWeatherLine(text) {
 }
 
 export function parseHeader(text) {
-  const firstLine = text.split('\n', 1)[0];
-  for (const prefix of [`${BALL} `, `${BALL_SHORTCODE} `]) {
-    if (firstLine.startsWith(prefix)) return firstLine.slice(prefix.length);
-  }
-  return null;
+  return text.split('\n', 1)[0];
 }

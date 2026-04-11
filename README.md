@@ -10,28 +10,30 @@ Three AWS Lambda functions:
 
 - **postMessage** — EventBridge Scheduler cron triggers it Tue/Thu 8:00 AM America/New_York (DST-aware). Fetches weather, formats, posts the default `🏀 today?` roll-call.
 - **reactionHandler** — API Gateway HTTP API route `POST /slack/events`. Verifies signature, re-fetches reaction state, rewrites the message via `chat.update`. Preserves any custom header (e.g. from `/ball`).
-- **slashCommand** — API Gateway HTTP API route `POST /slack/commands`. Handles `/ball <message>` — posts an ad-hoc roll-call with the user's custom header text and a mention attributing the caller. The reactionHandler handles reactions on these the same way it does scheduled posts.
+- **slashCommand** — API Gateway HTTP API route `POST /slack/commands`. Handles `/ball <message>` — posts an ad-hoc roll-call to the channel where the command was invoked, with the user's custom header text and a mention attributing the caller. The reactionHandler handles reactions on these the same way it does scheduled posts.
 
 On any unrecoverable send-time failure in any Lambda, a DM is sent to `U0000000000` via `chat.postMessage`. This is application-level error notification — it only fires inside the Lambdas, not on infra errors.
 
 ## /ball slash command
 
 ```
-/ball tonight at 7pm, outdoor courts
+/ball :basketball: tonight at 7pm, outdoor courts
 ```
 
 Renders as:
 
 ```
-🏀 tonight at 7pm, outdoor courts — @alice
+🏀 tonight at 7pm, outdoor courts (alice)
 
 ──────────────
 ☀️ Fairfax, VA — 72°F, Clear sky
 ```
 
+- The bot posts the user's text verbatim — no auto-prepended emoji. Type `:basketball:` (or any other emoji) yourself if you want one in the header.
+- `/ball` posts only to the channel where the command was invoked; the multi-channel `SLACK_CHANNELS` fanout only applies to the scheduled post.
 - Empty invocations (`/ball` with no text) respond with an ephemeral usage hint.
 - Weather fetch uses a 2-second timeout (vs. 3s for the scheduled post) to stay inside Slack's 3-second slash command deadline; on timeout the message posts without the weather line.
-- Reactions on `/ball` posts work identically to scheduled posts — the custom header is parsed out of the existing message and preserved on rewrite.
+- Reactions on `/ball` posts work identically to scheduled posts — the existing header is preserved on rewrite.
 
 To fix a typo or change the time after posting, run:
 

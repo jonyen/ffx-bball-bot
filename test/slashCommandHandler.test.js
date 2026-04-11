@@ -23,14 +23,10 @@ vi.mock('../src/shared/slack.js', () => ({
 vi.mock('../src/shared/scheduler.js', () => ({
   getSchedule: vi.fn(),
   updateSchedule: vi.fn(),
-  // Mirror the real implementation so behavior stays in sync with scheduler.js.
-  normalizeScheduleExpression: (text) => {
-    const trimmed = (text ?? '').trim();
-    if (!trimmed) return '';
-    if (/^(cron|rate|at)\s*\(/i.test(trimmed)) return trimmed;
-    return `cron(${trimmed})`;
-  },
 }));
+
+// scheduleParser is pure JS with no AWS SDK deps — use the real implementation
+// so handler tests exercise the same parser that runs in production.
 
 import { handler } from '../src/slashCommand/handler.js';
 import { verifySignature } from '../src/reactionHandler/verifySignature.js';
@@ -748,6 +744,114 @@ describe('slashCommand handler', () => {
       expect(res.statusCode).toBe(200);
       expect(getSchedule).toHaveBeenCalledTimes(1);
       expect(updateSchedule).not.toHaveBeenCalled();
+    });
+
+    test('`/ball schedule every Tue, Thu at 8am` parses NL and shows interpretation', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+      updateSchedule.mockResolvedValue({});
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule every Tue, Thu at 8am',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      expect(updateSchedule).toHaveBeenCalledTimes(1);
+      expect(updateSchedule.mock.calls[0][0].scheduleExpression).toBe(
+        'cron(0 8 ? * TUE,THU *)',
+      );
+
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toContain('cron(0 8 ? * TUE,THU *)');
+      expect(body.text).toMatch(/interpreted as/i);
+      expect(body.text).toContain('every TUE, THU at 8am');
+      expect(body.text).toContain('America/New_York');
+    });
+
+    test('`/ball schedule every weekday at 9:30am` uses MON-FRI shorthand', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+      updateSchedule.mockResolvedValue({});
+
+      await handler(
+        event({
+          command: '/ball',
+          text: 'schedule every weekday at 9:30am',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(updateSchedule.mock.calls[0][0].scheduleExpression).toBe(
+        'cron(30 9 ? * MON-FRI *)',
+      );
+    });
+
+    test('`/ball schedule every day at noon` maps to every-day cron', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+      updateSchedule.mockResolvedValue({});
+
+      await handler(
+        event({
+          command: '/ball',
+          text: 'schedule every day at noon',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(updateSchedule.mock.calls[0][0].scheduleExpression).toBe(
+        'cron(0 12 ? * * *)',
+      );
+    });
+
+    test('`/ball schedule bogus` returns an ephemeral parse error without calling updateSchedule', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule bogus',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toMatch(/couldn't parse/i);
+      expect(body.text).toMatch(/examples/i);
+      expect(updateSchedule).not.toHaveBeenCalled();
+      expect(notifyFailure).not.toHaveBeenCalled();
+    });
+
+    test('cron-kind updates show timezone (not "Interpreted as")', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+      updateSchedule.mockResolvedValue({});
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule 0 7 ? * MON,WED,FRI *',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      const body = JSON.parse(res.body);
+      expect(body.text).toContain('cron(0 7 ? * MON,WED,FRI *)');
+      expect(body.text).toContain('Timezone: America/New_York');
+      expect(body.text).not.toMatch(/interpreted as/i);
     });
   });
 });

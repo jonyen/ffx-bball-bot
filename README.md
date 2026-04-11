@@ -49,13 +49,21 @@ This rewrites the most recent bball message in the current channel with the new 
 /ball schedule
 ```
 
-Shows the current EventBridge schedule that drives the twice-weekly post (expression, timezone, enabled state) as an ephemeral message. Update it with:
+Shows the current EventBridge schedule that drives the twice-weekly post (expression, timezone, enabled state) as an ephemeral message.
+
+Update it with natural language, like Slack's `/remind`:
 
 ```
-/ball schedule <cron expression>
+/ball schedule every Tue, Thu at 8am
+/ball schedule every weekday at 9:30am
+/ball schedule every day at noon
+/ball schedule mon,wed,fri at 7am
+/ball schedule every Friday at 5pm
 ```
 
-Examples:
+The handler parses day(s) + time and translates to a cron expression in the schedule's existing timezone (`America/New_York`). The response echoes both the resulting cron and an `Interpreted as:` line so you can confirm the parse before it takes effect. Unambiguous 12-hour times (`am`/`pm`, or `noon`/`midnight`) and 24-hour `HH:MM` forms are both accepted; plain "8" without `am`/`pm` or a colon is rejected as ambiguous.
+
+Raw cron and rate expressions still work for power users:
 
 ```
 /ball schedule 0 7 ? * MON,WED,FRI *        # bare cron — auto-wrapped
@@ -91,9 +99,10 @@ src/
   slashCommand/      # /ball slash command Lambda
     handler.js
   shared/
-    slack.js         # Slack API client + notifyFailure
-    formatMessage.js # shared message formatter (+ parseHeader, parseWeatherLine)
-    scheduler.js     # EventBridge Scheduler client for /ball schedule
+    slack.js          # Slack API client + notifyFailure
+    formatMessage.js  # shared message formatter (+ parseHeader, parseWeatherLine)
+    scheduler.js      # EventBridge Scheduler client for /ball schedule
+    scheduleParser.js # natural-language → cron parser for /ball schedule
 test/                # vitest
 infra/
   template.yaml      # AWS SAM

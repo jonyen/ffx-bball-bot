@@ -313,4 +313,17 @@ describe('slashCommand handler', () => {
     expect(res.statusCode).toBe(500);
     expect(notifyFailure).toHaveBeenCalledTimes(2);
   });
+
+  test('returns 200 and no-ops when SLACK_CHANNELS is empty', async () => {
+    process.env.SLACK_CHANNELS = '';
+    fetchWeather.mockResolvedValue(null);
+
+    const res = await handler(
+      event({ command: '/ball', text: '7pm', user_id: 'U123', user_name: 'alice' }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(postMessage).not.toHaveBeenCalled();
+    expect(notifyFailure).not.toHaveBeenCalled();
+  });
 });

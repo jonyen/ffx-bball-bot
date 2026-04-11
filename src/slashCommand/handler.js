@@ -31,6 +31,10 @@ function decodeBody(event) {
   return raw;
 }
 
+async function handleEdit(_args) {
+  return ephemeral('edit flow not yet wired up');
+}
+
 export async function handler(event) {
   const token = process.env.SLACK_BOT_TOKEN;
   const secret = process.env.SLACK_SIGNING_SECRET;
@@ -52,6 +56,25 @@ export async function handler(event) {
 
   if (!text) {
     return ephemeral('Usage: `/ball <message>` — e.g. `/ball tonight at 7pm, outdoor courts`');
+  }
+
+  const editMatch = /^edit(\s+(.*))?$/i.exec(text);
+  if (editMatch) {
+    const editText = (editMatch[2] ?? '').trim();
+    if (!editText) {
+      return ephemeral(
+        'Usage: `/ball edit <new message>` — e.g. `/ball edit tonight at 8pm instead`',
+      );
+    }
+    return handleEdit({
+      token,
+      botUserId: process.env.SLACK_BOT_USER_ID,
+      channelId: params.get('channel_id') ?? '',
+      userId,
+      userName,
+      editText,
+      owmKey,
+    });
   }
 
   let displayName = userName;

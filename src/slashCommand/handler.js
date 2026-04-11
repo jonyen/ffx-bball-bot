@@ -1,4 +1,5 @@
 import { verifySignature } from '../reactionHandler/verifySignature.js';
+import { categorize } from '../reactionHandler/categorize.js';
 import { fetchWeather } from '../postMessage/weather.js';
 import { formatMessage } from '../shared/formatMessage.js';
 import {
@@ -6,6 +7,9 @@ import {
   getUserInfo,
   notifyFailure,
   parseChannels,
+  getChannelHistory,
+  getReactions,
+  updateMessage,
 } from '../shared/slack.js';
 
 const EMPTY_ROSTER = { in: [], out: [], unsure: [] };
@@ -31,8 +35,102 @@ function decodeBody(event) {
   return raw;
 }
 
-async function handleEdit(_args) {
-  return ephemeral('edit flow not yet wired up');
+async function handleEdit({
+  token,
+  botUserId,
+  channelId,
+  userId,
+  userName,
+  editText,
+  owmKey,
+}) {
+  if (!channelId) {
+    return ephemeral('Could not determine the current channel.');
+  }
+
+  let history;
+  try {
+    history = await getChannelHistory({ token, channel: channelId, limit: 20 });
+  } catch (err) {
+    await notifyFailure({
+      token,
+      error: err,
+      context: {
+        lambda: 'slashCommand',
+        phase: 'conversations.history',
+        channel: channelId,
+      },
+    });
+    return response(500, 'internal error');
+  }
+
+  const target = (history.messages ?? []).find((m) => m.user === botUserId);
+  if (!target) {
+    return ephemeral('No recent bball message to edit in this channel.');
+  }
+
+  const ts = target.ts;
+
+  let reactions = [];
+  try {
+    const result = await getReactions({ token, channel: channelId, ts });
+    reactions = result.message?.reactions ?? [];
+  } catch (err) {
+    await notifyFailure({
+      token,
+      error: err,
+      context: {
+        lambda: 'slashCommand',
+        phase: 'reactions.get',
+        channel: channelId,
+        ts,
+      },
+    });
+    return response(500, 'internal error');
+  }
+  const roster = categorize(reactions, botUserId);
+
+  let displayName = userName;
+  try {
+    const info = await getUserInfo({ token, userId });
+    const profile = info?.user?.profile;
+    displayName =
+      profile?.display_name?.trim() ||
+      profile?.real_name?.trim() ||
+      userName;
+  } catch (err) {
+    console.error('users.info fetch failed', err);
+  }
+
+  let weather = null;
+  try {
+    weather = await fetchWeather(owmKey, {
+      timeoutMs: WEATHER_TIMEOUT_MS,
+      target: 'now',
+    });
+  } catch (err) {
+    console.error('weather fetch failed', err);
+  }
+
+  const headerText = `${editText} (${displayName})`;
+  const newBody = formatMessage(roster, weather, { headerText });
+
+  try {
+    await updateMessage({ token, channel: channelId, ts, text: newBody });
+    return response(200);
+  } catch (err) {
+    await notifyFailure({
+      token,
+      error: err,
+      context: {
+        lambda: 'slashCommand',
+        phase: 'chat.update',
+        channel: channelId,
+        ts,
+      },
+    });
+    return response(500, 'internal error');
+  }
 }
 
 export async function handler(event) {

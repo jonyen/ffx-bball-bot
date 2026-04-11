@@ -10,6 +10,8 @@ import {
   getReactions,
   updateMessage,
 } from '../shared/slack.js';
+import { getSchedule, updateSchedule } from '../shared/scheduler.js';
+import { parseScheduleInput } from '../shared/scheduleParser.js';
 
 const EMPTY_ROSTER = { in: [], out: [], unsure: [] };
 const WEATHER_TIMEOUT_MS = 2000;
@@ -32,6 +34,113 @@ function decodeBody(event) {
     return Buffer.from(raw, 'base64').toString('utf-8');
   }
   return raw;
+}
+
+function formatScheduleView({ scheduleName, current }) {
+  const expr = current?.ScheduleExpression ?? 'unknown';
+  const tz = current?.ScheduleExpressionTimezone ?? 'UTC';
+  const state = current?.State ?? 'ENABLED';
+  return [
+    `📅 Current bball schedule (*${scheduleName}*)`,
+    `• Expression: \`${expr}\``,
+    `• Timezone: ${tz}`,
+    `• State: ${state}`,
+    '',
+    'Update with natural language (like `/remind`) — e.g.',
+    '• `/ball schedule every Tue, Thu at 8am`',
+    '• `/ball schedule every weekday at 9:30am`',
+    '• `/ball schedule every day at noon`',
+    '',
+    'Or pass a raw cron/rate expression — e.g.',
+    '• `/ball schedule 0 7 ? * MON,WED,FRI *`',
+    '• `/ball schedule cron(30 17 ? * FRI *)`',
+  ].join('\n');
+}
+
+const PARSE_HELP = [
+  'Examples:',
+  '• `/ball schedule every Tue, Thu at 8am`',
+  '• `/ball schedule every weekday at 9:30am`',
+  '• `/ball schedule every day at noon`',
+  '• `/ball schedule cron(0 8 ? * TUE,THU *)`',
+].join('\n');
+
+async function handleSchedule({
+  token,
+  userId,
+  scheduleName,
+  scheduleGroup,
+  scheduleText,
+}) {
+  if (!scheduleName) {
+    return ephemeral(
+      'Schedule name is not configured (missing `SCHEDULE_NAME` env var).',
+    );
+  }
+
+  let current;
+  try {
+    current = await getSchedule({ name: scheduleName, groupName: scheduleGroup });
+  } catch (err) {
+    await notifyFailure({
+      token,
+      error: err,
+      context: {
+        lambda: 'slashCommand',
+        phase: 'scheduler.getSchedule',
+        scheduleName,
+        user: userId,
+      },
+    });
+    return ephemeral(`Couldn't fetch schedule: ${err.message}`);
+  }
+
+  if (!scheduleText) {
+    return ephemeral(formatScheduleView({ scheduleName, current }));
+  }
+
+  let parsed;
+  try {
+    parsed = parseScheduleInput(scheduleText);
+  } catch (err) {
+    return ephemeral(`Couldn't parse schedule: ${err.message}\n\n${PARSE_HELP}`);
+  }
+
+  const newExpression = parsed.expression;
+
+  try {
+    await updateSchedule({
+      name: scheduleName,
+      groupName: scheduleGroup,
+      scheduleExpression: newExpression,
+      scheduleExpressionTimezone: current.ScheduleExpressionTimezone,
+      flexibleTimeWindow: current.FlexibleTimeWindow,
+      target: current.Target,
+      state: current.State,
+    });
+  } catch (err) {
+    await notifyFailure({
+      token,
+      error: err,
+      context: {
+        lambda: 'slashCommand',
+        phase: 'scheduler.updateSchedule',
+        scheduleName,
+        scheduleExpression: newExpression,
+        user: userId,
+      },
+    });
+    return ephemeral(`Schedule update failed: ${err.message}`);
+  }
+
+  const tz = current.ScheduleExpressionTimezone ?? 'UTC';
+  const lines = [`✅ Schedule updated.`, `• Expression: \`${newExpression}\``];
+  if (parsed.kind === 'natural') {
+    lines.push(`• Interpreted as: ${parsed.summary} (${tz})`);
+  } else {
+    lines.push(`• Timezone: ${tz}`);
+  }
+  return ephemeral(lines.join('\n'));
 }
 
 async function handleEdit({
@@ -156,6 +265,18 @@ export async function handler(event) {
 
   if (!text) {
     return ephemeral('Usage: `/ball <message>` — e.g. `/ball tonight at 7pm, outdoor courts`');
+  }
+
+  const scheduleMatch = /^schedule(\s+(.*))?$/i.exec(text);
+  if (scheduleMatch) {
+    const scheduleText = (scheduleMatch[2] ?? '').trim();
+    return handleSchedule({
+      token,
+      userId,
+      scheduleName: process.env.SCHEDULE_NAME ?? '',
+      scheduleGroup: process.env.SCHEDULE_GROUP ?? 'default',
+      scheduleText,
+    });
   }
 
   const editMatch = /^edit(\s+(.*))?$/i.exec(text);

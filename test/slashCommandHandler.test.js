@@ -72,6 +72,7 @@ describe('slashCommand handler', () => {
         text: 'tonight at 7pm',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
     expect(res.statusCode).toBe(401);
@@ -85,6 +86,7 @@ describe('slashCommand handler', () => {
         text: '',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
 
@@ -103,6 +105,7 @@ describe('slashCommand handler', () => {
         text: '   ',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
     expect(res.statusCode).toBe(200);
@@ -125,6 +128,7 @@ describe('slashCommand handler', () => {
         text: 'tonight at 7pm, outdoor courts',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
 
@@ -137,9 +141,9 @@ describe('slashCommand handler', () => {
     expect(postMessage).toHaveBeenCalledTimes(1);
     const call = postMessage.mock.calls[0][0];
     expect(call.token).toBe('xoxb-test');
-    expect(call.channel).toBe('C_TEST');
+    expect(call.channel).toBe('C_CURRENT');
     expect(call.text).toBe(
-      '🏀 tonight at 7pm, outdoor courts (Alice)\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky',
+      'tonight at 7pm, outdoor courts (Alice)\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky',
     );
   });
 
@@ -156,10 +160,11 @@ describe('slashCommand handler', () => {
         text: '7pm',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
 
-    expect(postMessage.mock.calls[0][0].text).toBe('🏀 7pm (Alice Smith)');
+    expect(postMessage.mock.calls[0][0].text).toBe('7pm (Alice Smith)');
   });
 
   test('falls back to slash-command user_name when users.info throws', async () => {
@@ -173,10 +178,11 @@ describe('slashCommand handler', () => {
         text: '7pm',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
 
-    expect(postMessage.mock.calls[0][0].text).toBe('🏀 7pm (alice)');
+    expect(postMessage.mock.calls[0][0].text).toBe('7pm (alice)');
   });
 
   test('still posts (without weather) when fetchWeather returns null', async () => {
@@ -189,11 +195,12 @@ describe('slashCommand handler', () => {
         text: '6pm Thursday',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
 
     const text = postMessage.mock.calls[0][0].text;
-    expect(text).toBe('🏀 6pm Thursday (Alice)');
+    expect(text).toBe('6pm Thursday (Alice)');
   });
 
   test('trims leading/trailing whitespace from the command text', async () => {
@@ -206,11 +213,12 @@ describe('slashCommand handler', () => {
         text: '   6pm Thursday   ',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
 
     const text = postMessage.mock.calls[0][0].text;
-    expect(text).toBe('🏀 6pm Thursday (Alice)');
+    expect(text).toBe('6pm Thursday (Alice)');
   });
 
   test('URL-decodes the form body', async () => {
@@ -224,11 +232,12 @@ describe('slashCommand handler', () => {
         text: 'park @ 7pm? bring water',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
 
     const text = postMessage.mock.calls[0][0].text;
-    expect(text).toBe('🏀 park @ 7pm? bring water (Alice)');
+    expect(text).toBe('park @ 7pm? bring water (Alice)');
   });
 
   test('notifies failure and returns 500 when chat.postMessage throws', async () => {
@@ -241,6 +250,7 @@ describe('slashCommand handler', () => {
         text: 'right now',
         user_id: 'U123',
         user_name: 'alice',
+        channel_id: 'C_CURRENT',
       }),
     );
 
@@ -249,6 +259,7 @@ describe('slashCommand handler', () => {
     const ctx = notifyFailure.mock.calls[0][0];
     expect(ctx.context.lambda).toBe('slashCommand');
     expect(ctx.context.user).toBe('U123');
+    expect(ctx.context.channel).toBe('C_CURRENT');
   });
 
   test('handles base64-encoded body from API Gateway', async () => {
@@ -260,6 +271,7 @@ describe('slashCommand handler', () => {
       text: 'right now',
       user_id: 'U123',
       user_name: 'alice',
+      channel_id: 'C_CURRENT',
     });
     const b64 = Buffer.from(raw, 'utf-8').toString('base64');
 
@@ -274,68 +286,45 @@ describe('slashCommand handler', () => {
     });
 
     const text = postMessage.mock.calls[0][0].text;
-    expect(text).toBe('🏀 right now (Alice)');
+    expect(text).toBe('right now (Alice)');
   });
 
-  test('fans out the create flow to every channel in SLACK_CHANNELS', async () => {
+  test('only posts to the invoking channel, ignoring SLACK_CHANNELS fanout', async () => {
     process.env.SLACK_CHANNELS = 'C_ONE,C_TWO';
     fetchWeather.mockResolvedValue(null);
     postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
 
     const res = await handler(
-      event({ command: '/ball', text: '7pm', user_id: 'U123', user_name: 'alice' }),
+      event({
+        command: '/ball',
+        text: '7pm',
+        user_id: 'U123',
+        user_name: 'alice',
+        channel_id: 'C_CURRENT',
+      }),
     );
 
     expect(res.statusCode).toBe(200);
-    expect(postMessage).toHaveBeenCalledTimes(2);
-    const channels = postMessage.mock.calls.map((c) => c[0].channel);
-    expect(channels).toEqual(['C_ONE', 'C_TWO']);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage.mock.calls[0][0].channel).toBe('C_CURRENT');
     expect(notifyFailure).not.toHaveBeenCalled();
   });
 
-  test('partial fanout failure: notifies per failure and returns an ephemeral warning', async () => {
-    process.env.SLACK_CHANNELS = 'C_ONE,C_TWO';
-    fetchWeather.mockResolvedValue(null);
-    postMessage
-      .mockRejectedValueOnce(new Error('slack down'))
-      .mockResolvedValueOnce({ ok: true, ts: '1.2' });
-
+  test('returns ephemeral error when channel_id is missing', async () => {
     const res = await handler(
-      event({ command: '/ball', text: '7pm', user_id: 'U123', user_name: 'alice' }),
+      event({
+        command: '/ball',
+        text: '7pm',
+        user_id: 'U123',
+        user_name: 'alice',
+      }),
     );
 
     expect(res.statusCode).toBe(200);
     const body = JSON.parse(res.body);
     expect(body.response_type).toBe('ephemeral');
-    expect(body.text).toMatch(/1 of 2/);
-    expect(notifyFailure).toHaveBeenCalledTimes(1);
-    expect(notifyFailure.mock.calls[0][0].context.channel).toBe('C_ONE');
-  });
-
-  test('total fanout failure: notifies and returns 500', async () => {
-    process.env.SLACK_CHANNELS = 'C_ONE,C_TWO';
-    fetchWeather.mockResolvedValue(null);
-    postMessage.mockRejectedValue(new Error('slack down'));
-
-    const res = await handler(
-      event({ command: '/ball', text: '7pm', user_id: 'U123', user_name: 'alice' }),
-    );
-
-    expect(res.statusCode).toBe(500);
-    expect(notifyFailure).toHaveBeenCalledTimes(2);
-  });
-
-  test('returns 200 and no-ops when SLACK_CHANNELS is empty', async () => {
-    process.env.SLACK_CHANNELS = '';
-    fetchWeather.mockResolvedValue(null);
-
-    const res = await handler(
-      event({ command: '/ball', text: '7pm', user_id: 'U123', user_name: 'alice' }),
-    );
-
-    expect(res.statusCode).toBe(200);
+    expect(body.text).toMatch(/channel/i);
     expect(postMessage).not.toHaveBeenCalled();
-    expect(notifyFailure).not.toHaveBeenCalled();
   });
 
   test('`/ball edit` with no new text returns an ephemeral usage hint', async () => {
@@ -433,7 +422,7 @@ describe('slashCommand handler', () => {
     expect(call.channel).toBe('C_CURRENT');
     expect(call.ts).toBe('2.0');
     expect(call.text).toBe(
-      '🏀 8pm instead (Alice)\n\nIn (1): <@U_HUMAN>\n\n──────────────\n☀️ Fairfax, VA — 70°F, Clear sky',
+      '8pm instead (Alice)\n\nIn (1): <@U_HUMAN>\n\n──────────────\n☀️ Fairfax, VA — 70°F, Clear sky',
     );
 
     // Create-flow side effects never fire.

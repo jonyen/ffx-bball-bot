@@ -1,0 +1,115 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >-
+  GitHub Actions OIDC trust for ffx-bball-bot. One-time bootstrap stack:
+  creates an IAM role that the repo's Deploy workflow assumes via OIDC,
+  plus (optionally) the GitHub OIDC identity provider itself.
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Default: jonyen
+    Description: GitHub org or user that owns the repository.
+
+  GitHubRepo:
+    Type: String
+    Default: ffx-bball-bot
+    Description: Repository name (without the org prefix).
+
+  SubjectFilter:
+    Type: String
+    Default: '*'
+    Description: >-
+      Value for the token.actions.githubusercontent.com:sub claim filter.
+      "*" allows any ref/environment (matches the default Deploy workflow).
+      Tighten to e.g. "environment:production" to only allow runs that
+      target the production environment, or "ref:refs/heads/main" to lock
+      to the main branch.
+
+  CreateOidcProvider:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: >-
+      Whether to create the GitHub OIDC provider. Set to "false" if you
+      already have one in this AWS account (providers are account-global,
+      so only one GitHub provider can exist per account).
+
+  ExistingProviderArn:
+    Type: String
+    Default: ''
+    Description: >-
+      If CreateOidcProvider=false, pass the existing provider ARN here,
+      e.g. arn:aws:iam::111111111111:oidc-provider/token.actions.githubusercontent.com
+
+  DeployRoleName:
+    Type: String
+    Default: ffx-bball-bot-github-deploy
+    Description: Name for the IAM role the workflow assumes.
+
+Conditions:
+  ShouldCreateProvider: !Equals [!Ref CreateOidcProvider, 'true']
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Condition: ShouldCreateProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        # Well-known GitHub Actions thumbprint. AWS now verifies GitHub
+        # tokens against Actions' live TLS chain, so this value is
+        # effectively a required placeholder.
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+
+  DeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref DeployRoleName
+      Description: Assumed by GitHub Actions to deploy ffx-bball-bot via SAM.
+      MaxSessionDuration: 3600
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !If
+                - ShouldCreateProvider
+                - !Ref GitHubOidcProvider
+                - !Ref ExistingProviderArn
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOrg}/${GitHubRepo}:${SubjectFilter}'
+      ManagedPolicyArns:
+        # AdministratorAccess is permissive but pragmatic for a personal
+        # project — SAM deploys need to create IAM roles, Lambda functions,
+        # API Gateway, CloudFormation stacks, S3 artifact buckets, and the
+        # EventBridge Scheduler resource. Swap to a tighter custom policy
+        # later if you want least-privilege.
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+Outputs:
+  DeployRoleArn:
+    Description: Paste this into the repo's AWS_DEPLOY_ROLE_ARN secret.
+    Value: !GetAtt DeployRole.Arn
+
+  ProviderArn:
+    Description: ARN of the GitHub OIDC provider in use.
+    Value: !If
+      - ShouldCreateProvider
+      - !Ref GitHubOidcProvider
+      - !Ref ExistingProviderArn
+
+  NextSteps:
+    Description: Post-bootstrap checklist.
+    Value: !Sub |
+      1. Copy DeployRoleArn above.
+      2. Open https://github.com/${GitHubOrg}/${GitHubRepo}/settings/secrets/actions
+      3. New repository secret: name=AWS_DEPLOY_ROLE_ARN, value=<DeployRoleArn>.
+      4. Add SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SLACK_BOT_USER_ID,
+         OPENWEATHERMAP_API_KEY, SLACK_CHANNELS as repo secrets too.
+      5. Push to main or run the Deploy workflow manually from the Actions tab.

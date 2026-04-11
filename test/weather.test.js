@@ -135,6 +135,49 @@ describe('fetchWeather', () => {
     });
   });
 
+  test('with target:"now" picks the forecast entry closest to now instead of noon ET', async () => {
+    // now = 7:30pm EDT on 2026-04-10 (23:30 UTC)
+    const now = new Date('2026-04-10T23:30:00Z');
+    const noonUnix = new Date('2026-04-10T16:00:00Z').getTime() / 1000; // noon EDT
+    const sixPmUnix = new Date('2026-04-10T22:00:00Z').getTime() / 1000; // 6pm EDT
+    const ninePmUnix = new Date('2026-04-11T01:00:00Z').getTime() / 1000; // 9pm EDT
+
+    globalThis.fetch.mockResolvedValue(
+      forecastResponse([
+        entry(noonUnix, 72, 'Clear', 'clear sky'),
+        entry(sixPmUnix, 65, 'Clouds', 'broken clouds'),
+        entry(ninePmUnix, 58, 'Rain', 'light rain'),
+      ]),
+    );
+
+    const result = await fetchWeather('api-key', { now, target: 'now' });
+
+    // 7:30pm is 1.5h from 6pm and 1.5h from 9pm — ties break to first encountered (6pm)
+    expect(result).toEqual({
+      icon: '☁️',
+      tempF: 65,
+      description: 'Broken clouds',
+    });
+  });
+
+  test('target:"noon" (default) still targets noon ET even when now is in the evening', async () => {
+    const now = new Date('2026-04-10T23:30:00Z'); // 7:30pm EDT
+    const noonUnix = new Date('2026-04-10T16:00:00Z').getTime() / 1000;
+    const eveningUnix = new Date('2026-04-10T23:00:00Z').getTime() / 1000;
+
+    globalThis.fetch.mockResolvedValue(
+      forecastResponse([
+        entry(noonUnix, 72, 'Clear', 'clear sky'),
+        entry(eveningUnix, 60, 'Rain', 'light rain'),
+      ]),
+    );
+
+    const result = await fetchWeather('api-key', { now });
+
+    expect(result.tempF).toBe(72);
+    expect(result.description).toBe('Clear sky');
+  });
+
   test('rounds temperature and capitalizes description', async () => {
     const now = new Date('2026-04-10T13:00:00Z');
     const noonUnix = new Date('2026-04-10T16:00:00Z').getTime() / 1000;

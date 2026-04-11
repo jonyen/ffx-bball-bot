@@ -116,7 +116,10 @@ describe('slashCommand handler', () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(fetchWeather).toHaveBeenCalledWith('owm-key', { timeoutMs: 2000 });
+    expect(fetchWeather).toHaveBeenCalledWith('owm-key', {
+      timeoutMs: 2000,
+      target: 'now',
+    });
     expect(getUserInfo).toHaveBeenCalledWith({ token: 'xoxb-test', userId: 'U123' });
     expect(postMessage).toHaveBeenCalledTimes(1);
     const call = postMessage.mock.calls[0][0];

@@ -18,10 +18,10 @@ Parameters:
     Type: String
     NoEcho: true
     Description: OpenWeatherMap API key
-  SlackChannel:
+  SlackChannels:
     Type: String
     Default: C0123456789
-    Description: Target Slack channel ID
+    Description: Comma-separated list of target Slack channel IDs
 
 Globals:
   Function:
@@ -35,7 +35,7 @@ Globals:
         SLACK_SIGNING_SECRET: !Ref SlackSigningSecret
         SLACK_BOT_USER_ID: !Ref SlackBotUserId
         OPENWEATHERMAP_API_KEY: !Ref OpenWeatherMapApiKey
-        SLACK_CHANNEL: !Ref SlackChannel
+        SLACK_CHANNELS: !Ref SlackChannels
 
 Resources:
   PostMessageFunction:

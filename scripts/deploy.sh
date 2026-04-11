@@ -15,7 +15,7 @@ set -a
 source "$ROOT/.env"
 set +a
 
-required=(SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SLACK_BOT_USER_ID OPENWEATHERMAP_API_KEY SLACK_CHANNEL)
+required=(SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SLACK_BOT_USER_ID OPENWEATHERMAP_API_KEY SLACK_CHANNELS)
 missing=()
 for v in "${required[@]}"; do
   if [ -z "${!v:-}" ]; then
@@ -38,4 +38,4 @@ sam deploy \
   --resolve-s3 \
   --no-confirm-changeset \
   --no-fail-on-empty-changeset \
-  --parameter-overrides "SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID OpenWeatherMapApiKey=$OPENWEATHERMAP_API_KEY SlackChannel=$SLACK_CHANNEL"
+  --parameter-overrides "SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID OpenWeatherMapApiKey=$OPENWEATHERMAP_API_KEY SlackChannels=$SLACK_CHANNELS"

@@ -57,11 +57,13 @@ Update it with natural language, like Slack's `/remind`:
 /ball schedule every Tue, Thu at 8am
 /ball schedule every weekday at 9:30am
 /ball schedule every day at noon
-/ball schedule mon,wed,fri at 7am
+/ball schedule every mon,wed,fri at 7am
 /ball schedule every Friday at 5pm
 ```
 
 The handler parses day(s) + time and translates to a cron expression in the schedule's existing timezone (`America/New_York`). The response echoes both the resulting cron and an `Interpreted as:` line so you can confirm the parse before it takes effect. Unambiguous 12-hour times (`am`/`pm`, or `noon`/`midnight`) and 24-hour `HH:MM` forms are both accepted; plain "8" without `am`/`pm` or a colon is rejected as ambiguous.
+
+**`every` is required for recurrence.** Bare forms like `/ball schedule Tuesday at 8am` are rejected with a suggested fix (`every Tuesday at 8am`). One-shot scheduling isn't supported — there's a single shared EventBridge schedule that gets mutated in place, so a one-shot fire would leave it in a terminal state and the next scheduled post would stop happening. Plural day names (`tuesdays`, `mondays`), the group aliases (`weekday`/`weekdays`/`weekend`/`weekends`), and `daily`/`everyday` all count as recurrence markers and are accepted without an explicit `every`.
 
 Raw cron and rate expressions still work for power users:
 

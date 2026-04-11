@@ -834,6 +834,28 @@ describe('slashCommand handler', () => {
       expect(notifyFailure).not.toHaveBeenCalled();
     });
 
+    test('`/ball schedule Tuesday at 8am` (no "every") is rejected with a suggested fix', async () => {
+      getSchedule.mockResolvedValue(currentSchedule);
+
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'schedule Tuesday at 8am',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toMatch(/one-shot/i);
+      expect(body.text).toContain('every Tuesday at 8am');
+      expect(updateSchedule).not.toHaveBeenCalled();
+      expect(notifyFailure).not.toHaveBeenCalled();
+    });
+
     test('cron-kind updates show timezone (not "Interpreted as")', async () => {
       getSchedule.mockResolvedValue(currentSchedule);
       updateSchedule.mockResolvedValue({});

@@ -81,8 +81,8 @@ describe('parseScheduleInput', () => {
       );
     });
 
-    test('mon,wed,fri at 7am', () => {
-      expect(parseScheduleInput('mon,wed,fri at 7am').expression).toBe(
+    test('every mon,wed,fri at 7am', () => {
+      expect(parseScheduleInput('every mon,wed,fri at 7am').expression).toBe(
         'cron(0 7 ? * MON,WED,FRI *)',
       );
     });
@@ -151,6 +151,41 @@ describe('parseScheduleInput', () => {
 
     test('bare 8 (no am/pm, no colon) is rejected as ambiguous', () => {
       expect(() => parseScheduleInput('every tuesday at 8')).toThrow(/time/i);
+    });
+  });
+
+  describe('one-shot rejection (requires "every" or a plural/group alias)', () => {
+    test('"Tuesday at 8am" is rejected with a suggested fix', () => {
+      expect(() => parseScheduleInput('Tuesday at 8am')).toThrow(/one-shot/i);
+      expect(() => parseScheduleInput('Tuesday at 8am')).toThrow(
+        /every Tuesday at 8am/,
+      );
+    });
+
+    test('"mon,wed,fri at 7am" (no every) is rejected', () => {
+      expect(() => parseScheduleInput('mon,wed,fri at 7am')).toThrow(/one-shot/i);
+    });
+
+    test('"Tue 8pm" is rejected', () => {
+      expect(() => parseScheduleInput('Tue 8pm')).toThrow(/one-shot/i);
+    });
+
+    test('plural day names count as recurrence markers (no "every" needed)', () => {
+      expect(parseScheduleInput('tuesdays at 8am').expression).toBe(
+        'cron(0 8 ? * TUE *)',
+      );
+    });
+
+    test('"daily" counts as a recurrence marker', () => {
+      expect(parseScheduleInput('daily at 6am').expression).toBe(
+        'cron(0 6 ? * * *)',
+      );
+    });
+
+    test('"weekdays" counts as a recurrence marker', () => {
+      expect(parseScheduleInput('weekdays at 9am').expression).toBe(
+        'cron(0 9 ? * MON-FRI *)',
+      );
     });
   });
 });

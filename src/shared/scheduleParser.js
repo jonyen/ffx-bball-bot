@@ -107,6 +107,23 @@ function describeDays(dowField, days) {
   return `every ${days.join(', ')}`;
 }
 
+function hasRecurrenceMarker(text) {
+  // A recurrence marker is any token that unambiguously means "repeating",
+  // matching Slack's /remind convention. Without one, we reject the input
+  // because one-shot scheduling isn't supported — the shared EventBridge
+  // schedule would be left in a terminal state after firing.
+  if (/\bevery\b/i.test(text)) return true;
+  if (/\b(everyday|daily)\b/i.test(text)) return true;
+  if (/\bweekdays?\b/i.test(text)) return true;
+  if (/\bweekends?\b/i.test(text)) return true;
+  if (
+    /\b(sundays|mondays|tuesdays|wednesdays|thursdays|fridays|saturdays)\b/i.test(text)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function parseNatural(text) {
   const lower = text.toLowerCase();
   const time = extractTime(lower);
@@ -119,6 +136,11 @@ function parseNatural(text) {
   if (!days || days.length === 0) {
     throw new Error(
       `Couldn't find any days in "${text}". Try "every Tue, Thu at 8am".`,
+    );
+  }
+  if (!hasRecurrenceMarker(lower)) {
+    throw new Error(
+      `One-shot schedules aren't supported (the shared schedule would stop firing after). Did you mean \`every ${text.trim()}\`?`,
     );
   }
   const dowField = compactDayField(days);

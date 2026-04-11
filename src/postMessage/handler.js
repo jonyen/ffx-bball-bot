@@ -18,6 +18,7 @@ export async function handler(_event) {
 
   const text = formatMessage(EMPTY_ROSTER, weather);
 
+  // Fanout pattern mirrors slashCommand/handler.js. If you fix a bug here, check there too.
   const results = await Promise.allSettled(
     channels.map((channel) => postMessage({ token, channel, text })),
   );

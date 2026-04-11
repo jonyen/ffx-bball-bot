@@ -84,7 +84,7 @@ npm run test:watch  # watch mode
 
 Copy `.env.example` to `.env` and fill in:
 
-- `SLACK_BOT_TOKEN` — xoxb-... with scopes `chat:write`, `reactions:read`, `channels:history`, `groups:history`
+- `SLACK_BOT_TOKEN` — xoxb-... with scopes `chat:write`, `reactions:read`, `channels:history`, `groups:history`, `users:read`
 - `SLACK_SIGNING_SECRET` — from the Slack app's Basic Information
 - `SLACK_BOT_USER_ID` — the bot's own Slack user ID (used to filter reactions on our own messages)
 - `OPENWEATHERMAP_API_KEY` — OpenWeatherMap API key
@@ -106,7 +106,7 @@ After the first deploy:
 2. Take the `SlackCommandsUrl` output, create a **Slash Command** in the Slack app config (`/ball`), and paste the URL as its Request URL. Short description: "Post an ad-hoc basketball roll-call". Usage hint: `<message>`.
 3. Invite the bot to the target channel.
 
-Required bot token scopes: `chat:write`, `reactions:read`, `channels:history`, `groups:history`, `commands`.
+Required bot token scopes: `chat:write`, `reactions:read`, `channels:history`, `groups:history`, `commands`, `users:read`.
 
 ## Notes
 

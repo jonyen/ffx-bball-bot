@@ -1,7 +1,12 @@
 import { verifySignature } from '../reactionHandler/verifySignature.js';
 import { fetchWeather } from '../postMessage/weather.js';
 import { formatMessage } from '../shared/formatMessage.js';
-import { postMessage, getUserInfo, notifyFailure } from '../shared/slack.js';
+import {
+  postMessage,
+  getUserInfo,
+  notifyFailure,
+  parseChannels,
+} from '../shared/slack.js';
 
 const EMPTY_ROSTER = { in: [], out: [], unsure: [] };
 const WEATHER_TIMEOUT_MS = 2000;
@@ -29,7 +34,7 @@ function decodeBody(event) {
 export async function handler(event) {
   const token = process.env.SLACK_BOT_TOKEN;
   const secret = process.env.SLACK_SIGNING_SECRET;
-  const channel = process.env.SLACK_CHANNEL;
+  const channels = parseChannels(process.env.SLACK_CHANNELS);
   const owmKey = process.env.OPENWEATHERMAP_API_KEY;
 
   const rawBody = decodeBody(event);
@@ -75,19 +80,39 @@ export async function handler(event) {
 
   const body = formatMessage(EMPTY_ROSTER, weather, { headerText });
 
-  try {
-    await postMessage({ token, channel, text: body });
-    return response(200);
-  } catch (err) {
-    await notifyFailure({
-      token,
-      error: err,
-      context: {
-        lambda: 'slashCommand',
-        user: userId,
-        channel,
-      },
-    });
+  const results = await Promise.allSettled(
+    channels.map((channel) => postMessage({ token, channel, text: body })),
+  );
+
+  const failures = [];
+  for (let i = 0; i < results.length; i += 1) {
+    const result = results[i];
+    if (result.status === 'rejected') {
+      const channel = channels[i];
+      failures.push({ channel, error: result.reason });
+      await notifyFailure({
+        token,
+        error: result.reason,
+        context: {
+          lambda: 'slashCommand',
+          phase: 'chat.postMessage',
+          user: userId,
+          channel,
+        },
+      });
+    }
+  }
+
+  if (failures.length === channels.length) {
     return response(500, 'internal error');
   }
+
+  if (failures.length > 0) {
+    const okCount = channels.length - failures.length;
+    return ephemeral(
+      `Posted to ${okCount} of ${channels.length} channels. ${failures.length} failed (DM sent).`,
+    );
+  }
+
+  return response(200);
 }

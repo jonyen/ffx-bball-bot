@@ -13,6 +13,7 @@ vi.mock('../src/shared/slack.js', () => ({
   postMessage: vi.fn(),
   getUserInfo: vi.fn(),
   notifyFailure: vi.fn(),
+  parseChannels: (v) => (v ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   FAILURE_DM_USER: 'U05SWHWFTEH',
 }));
 
@@ -44,7 +45,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   process.env.SLACK_BOT_TOKEN = 'xoxb-test';
   process.env.SLACK_SIGNING_SECRET = 'secret';
-  process.env.SLACK_CHANNEL = 'C_TEST';
+  process.env.SLACK_CHANNELS = 'C_TEST';
+  delete process.env.SLACK_CHANNEL;
   process.env.OPENWEATHERMAP_API_KEY = 'owm-key';
   verifySignature.mockReturnValue(true);
   getUserInfo.mockResolvedValue(userInfoResponse({ display_name: 'Alice' }));
@@ -262,5 +264,53 @@ describe('slashCommand handler', () => {
 
     const text = postMessage.mock.calls[0][0].text;
     expect(text).toBe('🏀 right now (Alice)');
+  });
+
+  test('fans out the create flow to every channel in SLACK_CHANNELS', async () => {
+    process.env.SLACK_CHANNELS = 'C_ONE,C_TWO';
+    fetchWeather.mockResolvedValue(null);
+    postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
+
+    const res = await handler(
+      event({ command: '/ball', text: '7pm', user_id: 'U123', user_name: 'alice' }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(postMessage).toHaveBeenCalledTimes(2);
+    const channels = postMessage.mock.calls.map((c) => c[0].channel);
+    expect(channels).toEqual(['C_ONE', 'C_TWO']);
+    expect(notifyFailure).not.toHaveBeenCalled();
+  });
+
+  test('partial fanout failure: notifies per failure and returns an ephemeral warning', async () => {
+    process.env.SLACK_CHANNELS = 'C_ONE,C_TWO';
+    fetchWeather.mockResolvedValue(null);
+    postMessage
+      .mockRejectedValueOnce(new Error('slack down'))
+      .mockResolvedValueOnce({ ok: true, ts: '1.2' });
+
+    const res = await handler(
+      event({ command: '/ball', text: '7pm', user_id: 'U123', user_name: 'alice' }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(res.body);
+    expect(body.response_type).toBe('ephemeral');
+    expect(body.text).toMatch(/1 of 2/);
+    expect(notifyFailure).toHaveBeenCalledTimes(1);
+    expect(notifyFailure.mock.calls[0][0].context.channel).toBe('C_ONE');
+  });
+
+  test('total fanout failure: notifies and returns 500', async () => {
+    process.env.SLACK_CHANNELS = 'C_ONE,C_TWO';
+    fetchWeather.mockResolvedValue(null);
+    postMessage.mockRejectedValue(new Error('slack down'));
+
+    const res = await handler(
+      event({ command: '/ball', text: '7pm', user_id: 'U123', user_name: 'alice' }),
+    );
+
+    expect(res.statusCode).toBe(500);
+    expect(notifyFailure).toHaveBeenCalledTimes(2);
   });
 });

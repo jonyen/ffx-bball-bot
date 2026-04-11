@@ -33,6 +33,14 @@ Renders as:
 - Weather fetch uses a 2-second timeout (vs. 3s for the scheduled post) to stay inside Slack's 3-second slash command deadline; on timeout the message posts without the weather line.
 - Reactions on `/ball` posts work identically to scheduled posts — the custom header is parsed out of the existing message and preserved on rewrite.
 
+To fix a typo or change the time after posting, run:
+
+```
+/ball edit <new message>
+```
+
+This rewrites the most recent bball message in the current channel with the new header text, preserving the current reactions (In/Out/Unsure) and refreshing the weather for "now". It only touches the channel where the command is run — other channels in `SLACK_CHANNELS` are left alone.
+
 ## Reactions
 
 | Emoji | Category |

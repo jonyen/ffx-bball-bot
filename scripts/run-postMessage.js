@@ -18,7 +18,7 @@ if (!existsSync(envPath)) {
 
 process.loadEnvFile(envPath);
 
-const required = ['SLACK_BOT_TOKEN', 'SLACK_CHANNEL'];
+const required = ['SLACK_BOT_TOKEN', 'SLACK_CHANNELS'];
 const missing = required.filter((k) => !process.env[k]);
 if (missing.length) {
   console.error(`Missing required env vars: ${missing.join(', ')}`);
@@ -31,7 +31,7 @@ if (!process.env.OPENWEATHERMAP_API_KEY) {
 
 const { handler } = await import('../src/postMessage/handler.js');
 
-console.log(`Posting to ${process.env.SLACK_CHANNEL}...`);
+console.log(`Posting to ${process.env.SLACK_CHANNELS}...`);
 
 try {
   const result = await handler({});

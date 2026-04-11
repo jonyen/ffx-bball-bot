@@ -80,7 +80,7 @@ Copy `.env.example` to `.env` and fill in:
 - `SLACK_SIGNING_SECRET` — from the Slack app's Basic Information
 - `SLACK_BOT_USER_ID` — the bot's own Slack user ID (used to filter reactions on our own messages)
 - `OPENWEATHERMAP_API_KEY` — OpenWeatherMap API key
-- `SLACK_CHANNEL` — target channel ID (default: `C03H7SUSUTZ`)
+- `SLACK_CHANNELS` — comma-separated list of target channel IDs (default: `C03H7SUSUTZ`). The bot must be invited to each channel.
 
 ## Deploy
 

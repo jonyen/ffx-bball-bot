@@ -239,7 +239,6 @@ async function handleEdit({
   userId,
   userName,
   editText,
-  owmKey,
 }) {
   if (!channelId) {
     return ephemeral('Could not determine the current channel.');
@@ -303,7 +302,7 @@ async function handleEdit({
 
   let weather = null;
   try {
-    weather = await fetchWeather(owmKey, {
+    weather = await fetchWeather({
       timeoutMs: WEATHER_TIMEOUT_MS,
       target: 'now',
     });
@@ -336,7 +335,6 @@ async function handleEdit({
 export async function handler(event) {
   const token = process.env.SLACK_BOT_TOKEN;
   const secret = process.env.SLACK_SIGNING_SECRET;
-  const owmKey = process.env.OPENWEATHERMAP_API_KEY;
 
   const rawBody = decodeBody(event);
   const signature = event.headers?.['x-slack-signature'];
@@ -397,7 +395,6 @@ export async function handler(event) {
       userId,
       userName,
       editText,
-      owmKey,
     });
   }
 
@@ -421,7 +418,7 @@ export async function handler(event) {
 
   let weather = null;
   try {
-    weather = await fetchWeather(owmKey, {
+    weather = await fetchWeather({
       timeoutMs: WEATHER_TIMEOUT_MS,
       target: 'now',
     });

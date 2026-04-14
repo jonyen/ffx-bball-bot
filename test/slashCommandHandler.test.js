@@ -66,7 +66,6 @@ beforeEach(() => {
   process.env.SLACK_SIGNING_SECRET = 'secret';
   process.env.SLACK_CHANNELS = 'C_TEST';
   delete process.env.SLACK_CHANNEL;
-  process.env.OPENWEATHERMAP_API_KEY = 'owm-key';
   process.env.SLACK_BOT_USER_ID = 'U_BOT';
   process.env.SCHEDULE_NAME = 'ffx-bball-post-schedule';
   process.env.SCHEDULE_GROUP = 'default';
@@ -144,7 +143,7 @@ describe('slashCommand handler', () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(fetchWeather).toHaveBeenCalledWith('owm-key', {
+    expect(fetchWeather).toHaveBeenCalledWith({
       timeoutMs: 2000,
       target: 'now',
     });
@@ -422,7 +421,7 @@ describe('slashCommand handler', () => {
     });
 
     // Weather re-fetched with the `now` target.
-    expect(fetchWeather).toHaveBeenCalledWith('owm-key', {
+    expect(fetchWeather).toHaveBeenCalledWith({
       timeoutMs: 2000,
       target: 'now',
     });

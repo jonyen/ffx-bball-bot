@@ -110,6 +110,6 @@ Outputs:
       1. Copy DeployRoleArn above.
       2. Open https://github.com/${GitHubOrg}/${GitHubRepo}/settings/secrets/actions
       3. New repository secret: name=AWS_DEPLOY_ROLE_ARN, value=<DeployRoleArn>.
-      4. Add SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SLACK_BOT_USER_ID,
-         OPENWEATHERMAP_API_KEY, SLACK_CHANNELS as repo secrets too.
+      4. Add SLACK_BOT_TOKEN, SLACK_SIGNING_SECRET, SLACK_BOT_USER_ID as
+         repo secrets, and SLACK_CHANNELS as a repo variable.
       5. Push to main or run the Deploy workflow manually from the Actions tab.

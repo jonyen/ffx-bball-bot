@@ -126,8 +126,9 @@ Copy `.env.example` to `.env` and fill in:
 - `SLACK_BOT_TOKEN` — xoxb-... with scopes `chat:write`, `reactions:read`, `channels:history`, `groups:history`, `users:read`
 - `SLACK_SIGNING_SECRET` — from the Slack app's Basic Information
 - `SLACK_BOT_USER_ID` — the bot's own Slack user ID (used to filter reactions on our own messages)
-- `OPENWEATHERMAP_API_KEY` — OpenWeatherMap API key
 - `SLACK_CHANNELS` — comma-separated list of target channel IDs (default: `C03H7SUSUTZ`). The bot must be invited to each channel.
+
+Weather is fetched from the US National Weather Service (weather.gov) API — no key required.
 
 ## Deploy
 
@@ -198,7 +199,11 @@ In the repo → **Settings → Secrets and variables → Actions → New reposit
 | `SLACK_BOT_TOKEN` | `xoxb-…` |
 | `SLACK_SIGNING_SECRET` | signing secret |
 | `SLACK_BOT_USER_ID` | the bot's user ID |
-| `OPENWEATHERMAP_API_KEY` | OWM key |
+
+And one repository **variable** (Settings → Secrets and variables → Actions → Variables tab):
+
+| Variable | Value |
+|---|---|
 | `SLACK_CHANNELS` | comma-separated channel IDs |
 
 ### Optional: production environment protection
@@ -209,4 +214,4 @@ Create a `production` environment in **Settings → Environments** and add deplo
 
 - **Scheduling:** the cron runs on EventBridge Scheduler with `ScheduleExpressionTimezone: America/New_York`, so 8:00 AM ET stays fixed year-round across DST transitions.
 - **Stateless:** no DB. Every reaction event re-fetches the full reaction state, so a dropped event self-heals on the next reaction.
-- **Weather fallback:** if OpenWeatherMap fails or times out (3s), the bot posts without the weather line.
+- **Weather fallback:** if the NWS API fails or times out (3s), the bot posts without the weather line.

@@ -25,10 +25,6 @@ if (missing.length) {
   process.exit(1);
 }
 
-if (!process.env.OPENWEATHERMAP_API_KEY) {
-  console.warn('OPENWEATHERMAP_API_KEY not set — message will post without weather.');
-}
-
 const { handler } = await import('../src/postMessage/handler.js');
 
 console.log(`Posting to ${process.env.SLACK_CHANNELS}...`);

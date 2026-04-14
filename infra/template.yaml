@@ -14,10 +14,6 @@ Parameters:
   SlackBotUserId:
     Type: String
     Description: Slack user ID of the bot itself (used to filter reactions on own messages)
-  OpenWeatherMapApiKey:
-    Type: String
-    NoEcho: true
-    Description: OpenWeatherMap API key
   SlackChannels:
     Type: String
     Default: C03H7SUSUTZ
@@ -46,7 +42,6 @@ Globals:
         SLACK_BOT_TOKEN: !Ref SlackBotToken
         SLACK_SIGNING_SECRET: !Ref SlackSigningSecret
         SLACK_BOT_USER_ID: !Ref SlackBotUserId
-        OPENWEATHERMAP_API_KEY: !Ref OpenWeatherMapApiKey
         SLACK_CHANNELS: !Ref SlackChannels
 
 Resources:

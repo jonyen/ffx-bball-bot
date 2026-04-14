@@ -24,6 +24,11 @@ concurrency:
   group: deploy-ffx-bball-bot
   cancel-in-progress: false
 
+# Opt the @v4 JS actions onto the Node 24 runner ahead of the June 2, 2026
+# forced cutover, so we catch any breakage now instead of on a deploy day.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     name: sam deploy

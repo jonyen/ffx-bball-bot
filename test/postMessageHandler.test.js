@@ -19,7 +19,6 @@ import { postMessage, notifyFailure } from '../src/shared/slack.js';
 beforeEach(() => {
   vi.clearAllMocks();
   process.env.SLACK_BOT_TOKEN = 'xoxb-test';
-  process.env.OPENWEATHERMAP_API_KEY = 'owm-key';
   process.env.SLACK_CHANNELS = 'C_TEST';
   delete process.env.SLACK_CHANNEL;
 });
@@ -31,7 +30,7 @@ describe('postMessage handler', () => {
 
     await handler({});
 
-    expect(fetchWeather).toHaveBeenCalledWith('owm-key');
+    expect(fetchWeather).toHaveBeenCalledWith();
     expect(postMessage).toHaveBeenCalledTimes(1);
     const call = postMessage.mock.calls[0][0];
     expect(call.token).toBe('xoxb-test');

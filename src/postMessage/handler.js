@@ -7,11 +7,10 @@ const EMPTY_ROSTER = { in: [], out: [], unsure: [] };
 export async function handler(_event) {
   const token = process.env.SLACK_BOT_TOKEN;
   const channels = parseChannels(process.env.SLACK_CHANNELS);
-  const owmKey = process.env.OPENWEATHERMAP_API_KEY;
 
   let weather = null;
   try {
-    weather = await fetchWeather(owmKey);
+    weather = await fetchWeather();
   } catch (err) {
     console.error('weather fetch failed', err);
   }

@@ -13,7 +13,7 @@ if [ -f "$ROOT/.env" ]; then
   set +a
 fi
 
-required=(SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SLACK_BOT_USER_ID OPENWEATHERMAP_API_KEY SLACK_CHANNELS)
+required=(SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SLACK_BOT_USER_ID SLACK_CHANNELS)
 missing=()
 for v in "${required[@]}"; do
   if [ -z "${!v:-}" ]; then
@@ -34,7 +34,7 @@ SCHEDULE_NAME=ffx-bball-post-schedule
 # first deploy the schedule doesn't exist yet, so we fall back to the default.
 GIT_SHA="${GITHUB_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 
-PARAMS="SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID OpenWeatherMapApiKey=$OPENWEATHERMAP_API_KEY SlackChannels=$SLACK_CHANNELS GitSha=$GIT_SHA"
+PARAMS="SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID SlackChannels=$SLACK_CHANNELS GitSha=$GIT_SHA"
 
 SCHED_ERR="$(mktemp)"
 trap 'rm -f "$SCHED_ERR"' EXIT

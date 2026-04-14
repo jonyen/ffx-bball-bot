@@ -62,6 +62,5 @@ jobs:
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
           SLACK_SIGNING_SECRET: ${{ secrets.SLACK_SIGNING_SECRET }}
           SLACK_BOT_USER_ID: ${{ secrets.SLACK_BOT_USER_ID }}
-          OPENWEATHERMAP_API_KEY: ${{ secrets.OPENWEATHERMAP_API_KEY }}
-          SLACK_CHANNELS: ${{ secrets.SLACK_CHANNELS }}
+          SLACK_CHANNELS: ${{ vars.SLACK_CHANNELS }}
         run: bash scripts/deploy.sh

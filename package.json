@@ -5,7 +5,7 @@
   "description": "Slack bot that posts a basketball roll-call for Fairfax, VA twice a week and tracks RSVPs via reactions",
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "scripts": {
     "test": "vitest run",

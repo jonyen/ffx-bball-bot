@@ -30,6 +30,10 @@ Parameters:
     Type: String
     Default: unknown
     Description: Commit SHA being deployed; surfaced via /ball info.
+  GithubRunNumber:
+    Type: String
+    Default: unknown
+    Description: GitHub Actions run number for the deploy; surfaced via /ball info.
 
 Globals:
   Function:
@@ -113,6 +117,7 @@ Resources:
           SCHEDULE_NAME: !Ref PostSchedule
           SCHEDULE_GROUP: default
           GIT_SHA: !Ref GitSha
+          GITHUB_RUN_NUMBER: !Ref GithubRunNumber
       Policies:
         - Statement:
             - Effect: Allow

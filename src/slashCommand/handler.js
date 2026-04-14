@@ -26,7 +26,7 @@ const USAGE_HELP = [
   '• `/ball schedule <desired schedule>` — update the schedule using natural language (e.g. `every Tue, Thu at 8am`)',
   '• `/ball schedule pause` — pause the schedule',
   '• `/ball schedule resume` — resume the schedule',
-  '• `/ball info` — show the deployed commit SHA',
+  '• `/ball info` — show the deployed commit SHA and GitHub run number',
 ].join('\n');
 
 function response(statusCode, body = '', headers) {
@@ -377,7 +377,10 @@ export async function handler(event) {
 
   if (/^info\s*$/i.test(text)) {
     const sha = process.env.GIT_SHA || 'unknown';
-    return ephemeral(`*bball bot*\n• Commit: \`${sha}\``);
+    const githubRunNumber = process.env.GITHUB_RUN_NUMBER || 'unknown';
+    return ephemeral(
+      `*bball bot*\n• Commit: \`${sha}\`\n• GitHub run: \`#${githubRunNumber}\``,
+    );
   }
 
   const editMatch = /^edit(\s+(.*))?$/i.exec(text);

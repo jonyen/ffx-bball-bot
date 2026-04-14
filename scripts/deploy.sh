@@ -33,8 +33,9 @@ SCHEDULE_NAME=ffx-bball-post-schedule
 # made via `/ball schedule` are not clobbered by the template default. On the
 # first deploy the schedule doesn't exist yet, so we fall back to the default.
 GIT_SHA="${GITHUB_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
+GITHUB_RUN_NUMBER="${GITHUB_RUN_NUMBER:-local}"
 
-PARAMS="SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID SlackChannels=$SLACK_CHANNELS GitSha=$GIT_SHA"
+PARAMS="SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID SlackChannels=$SLACK_CHANNELS GitSha=$GIT_SHA GithubRunNumber=$GITHUB_RUN_NUMBER"
 
 SCHED_ERR="$(mktemp)"
 trap 'rm -f "$SCHED_ERR"' EXIT

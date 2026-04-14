@@ -206,6 +206,8 @@ And one repository **variable** (Settings → Secrets and variables → Actions 
 |---|---|
 | `SLACK_CHANNELS` | comma-separated channel IDs |
 
+> ⚠️ **After editing `SLACK_CHANNELS`, manually trigger a deploy.** The Lambda reads the list at deploy time, not at invocation time, so variable edits don't take effect until the next `sam deploy`. GitHub doesn't emit an event on variable changes, so there's no auto-redeploy — run **Actions → Deploy → Run workflow** (the workflow already has `workflow_dispatch`) once you've saved the new value.
+
 ### Optional: production environment protection
 
 Create a `production` environment in **Settings → Environments** and add deploy-protection rules (required reviewers, wait timer, branch restrictions). The workflow already references `environment: production`, so the rules take effect automatically — no workflow change needed.

@@ -1,6 +1,6 @@
 const FAIRFAX_LAT = 38.8462;
 const FAIRFAX_LON = -77.3064;
-const DEFAULT_TIMEOUT_MS = 3000;
+const DEFAULT_TIMEOUT_MS = 8000;
 const POINTS_URL = `https://api.weather.gov/points/${FAIRFAX_LAT},${FAIRFAX_LON}`;
 const USER_AGENT = 'ffx-bball-bot (https://github.com/jonyen/ffx-bball-bot)';
 
@@ -99,7 +99,8 @@ export async function fetchWeather({
       tempF: Math.round(entry.temperature ?? 0),
       description: shortForecast,
     };
-  } catch {
+  } catch (err) {
+    console.error('weather fetch failed', err);
     return null;
   } finally {
     clearTimeout(timer);

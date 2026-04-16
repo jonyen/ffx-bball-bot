@@ -1,5 +1,5 @@
 const IN_EMOJI = new Set(['basketball', '+1', 'white_check_mark']);
-const OUT_EMOJI = new Set(['x', '-1']);
+const OUT_EMOJI = new Set(['x', '-1', 'nope']);
 
 export function categorize(reactions, botUserId) {
   const byUser = new Map();

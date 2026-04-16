@@ -82,7 +82,7 @@ The command calls `scheduler:GetSchedule` and `scheduler:UpdateSchedule` on the 
 | Emoji | Category |
 |---|---|
 | `basketball`, `+1`, `white_check_mark` | In |
-| `x`, `-1` | Out |
+| `x`, `-1`, `nope` | Out |
 | anything else | Maybe |
 
 If a user lands in multiple categories, In > Out > Maybe.

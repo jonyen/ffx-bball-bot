@@ -2,7 +2,7 @@ import { fetchWeather } from './weather.js';
 import { formatMessage } from '../shared/formatMessage.js';
 import { postMessage, notifyFailure, parseChannels } from '../shared/slack.js';
 
-const EMPTY_ROSTER = { in: [], out: [], unsure: [] };
+const EMPTY_ROSTER = { in: [], out: [], maybe: [] };
 
 export async function handler(_event) {
   const token = process.env.SLACK_BOT_TOKEN;

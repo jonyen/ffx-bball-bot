@@ -14,7 +14,7 @@ import {
 import { getSchedule, updateSchedule } from '../shared/scheduler.js';
 import { parseScheduleInput } from '../shared/scheduleParser.js';
 
-const EMPTY_ROSTER = { in: [], out: [], unsure: [] };
+const EMPTY_ROSTER = { in: [], out: [], maybe: [] };
 const WEATHER_TIMEOUT_MS = 2000;
 
 const USAGE_HELP = [

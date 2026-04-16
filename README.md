@@ -41,7 +41,7 @@ To fix a typo or change the time after posting, run:
 /ball edit <new message>
 ```
 
-This rewrites the most recent bball message in the current channel with the new header text, preserving the current reactions (In/Out/Unsure) and refreshing the weather for "now". It only touches the channel where the command is run — other channels in `SLACK_CHANNELS` are left alone.
+This rewrites the most recent bball message in the current channel with the new header text, preserving the current reactions (In/Maybe/Out) and refreshing the weather for "now". It only touches the channel where the command is run — other channels in `SLACK_CHANNELS` are left alone.
 
 ### Viewing and updating the scheduled post
 
@@ -83,9 +83,9 @@ The command calls `scheduler:GetSchedule` and `scheduler:UpdateSchedule` on the 
 |---|---|
 | `basketball`, `+1`, `white_check_mark` | In |
 | `x`, `-1` | Out |
-| anything else | Unsure |
+| anything else | Maybe |
 
-If a user lands in multiple categories, In > Out > Unsure.
+If a user lands in multiple categories, In > Out > Maybe.
 
 ## Layout
 

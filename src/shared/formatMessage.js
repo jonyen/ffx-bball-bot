@@ -17,8 +17,8 @@ export function formatMessage(roster, weather, { headerText } = {}) {
 
   const rosterLines = [];
   if (roster.in.length) rosterLines.push(`In (${roster.in.length}): ${mentions(roster.in)}`);
+  if (roster.maybe.length) rosterLines.push(`Maybe (${roster.maybe.length}): ${mentions(roster.maybe)}`);
   if (roster.out.length) rosterLines.push(`Out: ${mentions(roster.out)}`);
-  if (roster.unsure.length) rosterLines.push(`Unsure: ${mentions(roster.unsure)}`);
   if (rosterLines.length) sections.push(rosterLines.join('\n'));
 
   const line = weatherLine(weather);

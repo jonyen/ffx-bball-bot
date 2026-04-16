@@ -11,7 +11,7 @@ const WEATHER = {
   description: 'Clear sky',
 };
 
-const EMPTY = { in: [], out: [], unsure: [] };
+const EMPTY = { in: [], out: [], maybe: [] };
 
 describe('formatMessage', () => {
   test('initial message (no reactions) includes weather', () => {
@@ -28,7 +28,7 @@ describe('formatMessage', () => {
 
   test('renders users as slack mentions with a count on the In line', () => {
     const msg = formatMessage(
-      { in: ['U1', 'U2'], out: [], unsure: [] },
+      { in: ['U1', 'U2'], out: [], maybe: [] },
       WEATHER,
     );
     expect(msg).toContain('In (2): <@U1>, <@U2>');
@@ -36,41 +36,41 @@ describe('formatMessage', () => {
 
   test('only shows categories that have members', () => {
     const msg = formatMessage(
-      { in: ['U1'], out: [], unsure: [] },
+      { in: ['U1'], out: [], maybe: [] },
       WEATHER,
     );
     expect(msg).toContain('In (1): <@U1>');
     expect(msg).not.toContain('Out:');
-    expect(msg).not.toContain('Unsure:');
+    expect(msg).not.toContain('Maybe:');
   });
 
   test('shows all three categories when populated', () => {
     const msg = formatMessage(
-      { in: ['U1'], out: ['U2'], unsure: ['U3'] },
+      { in: ['U1'], out: ['U2'], maybe: ['U3'] },
       WEATHER,
     );
     expect(msg).toContain('In (1): <@U1>');
+    expect(msg).toContain('Maybe (1): <@U3>');
     expect(msg).toContain('Out: <@U2>');
-    expect(msg).toContain('Unsure: <@U3>');
   });
 
   test('full message with reactions matches the spec example', () => {
     const msg = formatMessage(
-      { in: ['U123', 'U456'], out: ['U789'], unsure: ['U012'] },
+      { in: ['U123', 'U456'], out: ['U789'], maybe: ['U012'] },
       WEATHER,
     );
     expect(msg).toBe(
       '🏀 today?\n\n' +
         'In (2): <@U123>, <@U456>\n' +
-        'Out: <@U789>\n' +
-        'Unsure: <@U012>\n\n' +
+        'Maybe (1): <@U012>\n' +
+        'Out: <@U789>\n\n' +
         '──────────────\n' +
         '☀️ Fairfax, VA — 72°F, Clear sky',
     );
   });
 
   test('with reactions but null weather still renders the roster', () => {
-    const msg = formatMessage({ in: ['U1'], out: [], unsure: [] }, null);
+    const msg = formatMessage({ in: ['U1'], out: [], maybe: [] }, null);
     expect(msg).toBe('🏀 today?\n\nIn (1): <@U1>');
   });
 });
@@ -96,7 +96,7 @@ describe('parseWeatherLine', () => {
 describe('formatMessage with raw weather line', () => {
   test('accepts a pre-formatted weather line string', () => {
     const rawLine = '🌧️ Fairfax, VA — 58°F, Light rain';
-    const msg = formatMessage({ in: ['U1'], out: [], unsure: [] }, rawLine);
+    const msg = formatMessage({ in: ['U1'], out: [], maybe: [] }, rawLine);
     expect(msg).toBe(
       '🏀 today?\n\nIn (1): <@U1>\n\n──────────────\n🌧️ Fairfax, VA — 58°F, Light rain',
     );
@@ -122,7 +122,7 @@ describe('formatMessage with custom header', () => {
 
   test('custom header with reactions and null weather', () => {
     const msg = formatMessage(
-      { in: ['U1'], out: [], unsure: [] },
+      { in: ['U1'], out: [], maybe: [] },
       null,
       { headerText: 'pickup at the park' },
     );

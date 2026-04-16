@@ -9,12 +9,12 @@ function reaction(name, users) {
 
 describe('categorize', () => {
   test('empty reactions yields empty roster', () => {
-    expect(categorize([], BOT)).toEqual({ in: [], out: [], unsure: [] });
+    expect(categorize([], BOT)).toEqual({ in: [], out: [], maybe: [] });
   });
 
   test('basketball emoji marks user In', () => {
     const result = categorize([reaction('basketball', ['U1'])], BOT);
-    expect(result).toEqual({ in: ['U1'], out: [], unsure: [] });
+    expect(result).toEqual({ in: ['U1'], out: [], maybe: [] });
   });
 
   test('+1 marks user In', () => {
@@ -29,7 +29,7 @@ describe('categorize', () => {
 
   test('x marks user Out', () => {
     const result = categorize([reaction('x', ['U1'])], BOT);
-    expect(result).toEqual({ in: [], out: ['U1'], unsure: [] });
+    expect(result).toEqual({ in: [], out: ['U1'], maybe: [] });
   });
 
   test('-1 marks user Out', () => {
@@ -37,9 +37,9 @@ describe('categorize', () => {
     expect(result.out).toEqual(['U1']);
   });
 
-  test('unknown emoji marks user Unsure', () => {
+  test('unknown emoji marks user Maybe', () => {
     const result = categorize([reaction('thinking_face', ['U1'])], BOT);
-    expect(result).toEqual({ in: [], out: [], unsure: ['U1'] });
+    expect(result).toEqual({ in: [], out: [], maybe: ['U1'] });
   });
 
   test('filters out the bot user from every category', () => {
@@ -51,23 +51,23 @@ describe('categorize', () => {
       ],
       BOT,
     );
-    expect(result).toEqual({ in: ['U1'], out: [], unsure: [] });
+    expect(result).toEqual({ in: ['U1'], out: [], maybe: [] });
   });
 
-  test('user in both In and Unsure is only counted as In', () => {
+  test('user in both In and Maybe is only counted as In', () => {
     const result = categorize(
       [reaction('basketball', ['U1']), reaction('eyes', ['U1'])],
       BOT,
     );
-    expect(result).toEqual({ in: ['U1'], out: [], unsure: [] });
+    expect(result).toEqual({ in: ['U1'], out: [], maybe: [] });
   });
 
-  test('user in both Out and Unsure is only counted as Out', () => {
+  test('user in both Out and Maybe is only counted as Out', () => {
     const result = categorize(
       [reaction('x', ['U1']), reaction('eyes', ['U1'])],
       BOT,
     );
-    expect(result).toEqual({ in: [], out: ['U1'], unsure: [] });
+    expect(result).toEqual({ in: [], out: ['U1'], maybe: [] });
   });
 
   test('user in both In and Out resolves to In', () => {
@@ -75,7 +75,7 @@ describe('categorize', () => {
       [reaction('basketball', ['U1']), reaction('x', ['U1'])],
       BOT,
     );
-    expect(result).toEqual({ in: ['U1'], out: [], unsure: [] });
+    expect(result).toEqual({ in: ['U1'], out: [], maybe: [] });
   });
 
   test('multiple users across categories', () => {
@@ -92,7 +92,7 @@ describe('categorize', () => {
     );
     expect(result.in.sort()).toEqual(['U1', 'U2', 'U3']);
     expect(result.out.sort()).toEqual(['U4', 'U5']);
-    expect(result.unsure.sort()).toEqual(['U6', 'U7']);
+    expect(result.maybe.sort()).toEqual(['U6', 'U7']);
   });
 
   test('deduplicates a user who appears twice in the same category', () => {

@@ -84,6 +84,25 @@ describe('reactionHandler', () => {
     expect(updateMessage).not.toHaveBeenCalled();
   });
 
+  test('returns 200 no-op when reaction is on a thread reply, not the parent', async () => {
+    getHistory.mockResolvedValue({
+      messages: [{ user: BOT, text: '🏀 today?', ts: '1.0' }],
+    });
+
+    const res = await handler(
+      event({
+        type: 'event_callback',
+        event: {
+          type: 'reaction_added',
+          item: { channel: 'C1', ts: '1.5' },
+        },
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(updateMessage).not.toHaveBeenCalled();
+  });
+
   test('rebuilds and updates the message on reaction_added', async () => {
     getHistory.mockResolvedValue({
       messages: [
@@ -199,6 +218,52 @@ describe('reactionHandler', () => {
     expect(text).toContain('In (1): <@U1>');
     expect(text).toContain('☀️ Fairfax, VA — 72°F, Clear sky');
     expect(text).not.toContain('🏀 today?');
+  });
+
+  test('swallows cant_update_message as a no-op without notifying', async () => {
+    getHistory.mockResolvedValue({
+      messages: [{ user: BOT, text: '🏀 today?', ts: '1.2' }],
+    });
+    getReactions.mockResolvedValue({ message: { reactions: [] } });
+    const err = new Error('Slack chat.update error: cant_update_message');
+    err.slackError = 'cant_update_message';
+    updateMessage.mockRejectedValue(err);
+
+    const res = await handler(
+      event({
+        type: 'event_callback',
+        event: {
+          type: 'reaction_added',
+          item: { channel: 'C1', ts: '1.2' },
+        },
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(notifyFailure).not.toHaveBeenCalled();
+  });
+
+  test('swallows message_not_found as a no-op without notifying', async () => {
+    getHistory.mockResolvedValue({
+      messages: [{ user: BOT, text: '🏀 today?', ts: '1.2' }],
+    });
+    getReactions.mockResolvedValue({ message: { reactions: [] } });
+    const err = new Error('Slack chat.update error: message_not_found');
+    err.slackError = 'message_not_found';
+    updateMessage.mockRejectedValue(err);
+
+    const res = await handler(
+      event({
+        type: 'event_callback',
+        event: {
+          type: 'reaction_added',
+          item: { channel: 'C1', ts: '1.2' },
+        },
+      }),
+    );
+
+    expect(res.statusCode).toBe(200);
+    expect(notifyFailure).not.toHaveBeenCalled();
   });
 
   test('filters out the bot user from the computed roster', async () => {

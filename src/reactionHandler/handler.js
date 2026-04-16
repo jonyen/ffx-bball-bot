@@ -53,7 +53,7 @@ export async function handler(event) {
   try {
     const history = await getHistory({ token, channel, ts });
     const original = history.messages?.[0];
-    if (!original || original.user !== botUserId) {
+    if (!original || original.ts !== ts || original.user !== botUserId) {
       return response(200);
     }
 
@@ -66,7 +66,17 @@ export async function handler(event) {
     const headerText = parseHeader(originalText);
     const newText = formatMessage(roster, weatherLine, { headerText });
 
-    await updateMessage({ token, channel, ts, text: newText });
+    try {
+      await updateMessage({ token, channel, ts, text: newText });
+    } catch (err) {
+      if (
+        err.slackError === 'cant_update_message' ||
+        err.slackError === 'message_not_found'
+      ) {
+        return response(200);
+      }
+      throw err;
+    }
     return response(200);
   } catch (err) {
     await notifyFailure({

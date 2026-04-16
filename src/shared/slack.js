@@ -2,6 +2,12 @@ export const FAILURE_DM_USER = 'U05SWHWFTEH';
 
 const BASE = 'https://slack.com/api';
 
+function slackError(method, code) {
+  const err = new Error(`Slack ${method} error: ${code}`);
+  err.slackError = code;
+  return err;
+}
+
 async function callPost(method, token, body) {
   const response = await fetch(`${BASE}/${method}`, {
     method: 'POST',
@@ -18,7 +24,7 @@ async function callPost(method, token, body) {
 
   const data = await response.json();
   if (!data.ok) {
-    throw new Error(`Slack ${method} error: ${data.error}`);
+    throw slackError(method, data.error);
   }
   return data;
 }
@@ -36,7 +42,7 @@ async function callGet(method, token, params) {
 
   const data = await response.json();
   if (!data.ok) {
-    throw new Error(`Slack ${method} error: ${data.error}`);
+    throw slackError(method, data.error);
   }
   return data;
 }

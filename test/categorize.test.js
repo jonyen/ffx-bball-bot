@@ -37,6 +37,11 @@ describe('categorize', () => {
     expect(result.out).toEqual(['U1']);
   });
 
+  test('nope marks user Out', () => {
+    const result = categorize([reaction('nope', ['U1'])], BOT);
+    expect(result.out).toEqual(['U1']);
+  });
+
   test('unknown emoji marks user Maybe', () => {
     const result = categorize([reaction('thinking_face', ['U1'])], BOT);
     expect(result).toEqual({ in: [], out: [], maybe: ['U1'] });

@@ -40,7 +40,7 @@ const token = process.env.SLACK_BOT_TOKEN;
 const botUserId = process.env.SLACK_BOT_USER_ID;
 const channels = parseChannels(process.env.SLACK_CHANNELS);
 
-const weather = await fetchWeather({ timeoutMs: 8000, target: 'now' });
+const weather = await fetchWeather({ timeoutMs: 8000, target: 'noon' });
 if (!weather) {
   console.error('✗ weather fetch returned null — aborting');
   process.exit(1);

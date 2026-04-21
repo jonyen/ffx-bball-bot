@@ -56,6 +56,8 @@ Resources:
       CodeUri: ../src/
       Handler: postMessage/handler.handler
       Description: Posts the basketball roll-call message twice a week
+      # Headroom for up to 3 weather-fetch attempts (8s each) before posting.
+      Timeout: 30
 
   PostScheduleRole:
     Type: AWS::IAM::Role

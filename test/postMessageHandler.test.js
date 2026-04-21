@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('../src/postMessage/weather.js', () => ({
   fetchWeather: vi.fn(),
@@ -16,11 +16,24 @@ import { handler } from '../src/postMessage/handler.js';
 import { fetchWeather } from '../src/postMessage/weather.js';
 import { postMessage, notifyFailure } from '../src/shared/slack.js';
 
+// Fake timers skip the retry-delay sleeps inside the handler's weather
+// fetch without keeping the test suite waiting in real time.
+function runHandler() {
+  const pending = handler({});
+  const advance = vi.runAllTimersAsync();
+  return Promise.all([pending, advance]).then(([r]) => r);
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.useFakeTimers();
   process.env.SLACK_BOT_TOKEN = 'xoxb-test';
   process.env.SLACK_CHANNELS = 'C_TEST';
   delete process.env.SLACK_CHANNEL;
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('postMessage handler', () => {
@@ -28,7 +41,7 @@ describe('postMessage handler', () => {
     fetchWeather.mockResolvedValue({ icon: '☀️', tempF: 72, description: 'Clear sky' });
     postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
 
-    await handler({});
+    await runHandler();
 
     expect(fetchWeather).toHaveBeenCalledWith();
     expect(postMessage).toHaveBeenCalledTimes(1);
@@ -44,11 +57,38 @@ describe('postMessage handler', () => {
     fetchWeather.mockResolvedValue(null);
     postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
 
-    await handler({});
+    await runHandler();
 
     const text = postMessage.mock.calls[0][0].text;
     expect(text).toBe('🏀 today?');
     expect(notifyFailure).not.toHaveBeenCalled();
+  });
+
+  test('retries fetchWeather on transient failure so scheduled posts still include weather', async () => {
+    fetchWeather
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('nws 502'))
+      .mockResolvedValueOnce({ icon: '☀️', tempF: 72, description: 'Clear sky' });
+    postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await runHandler();
+
+    expect(fetchWeather).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage.mock.calls[0][0].text).toContain('72°F');
+    errSpy.mockRestore();
+  });
+
+  test('gives up after 3 failed weather attempts and still posts', async () => {
+    fetchWeather.mockResolvedValue(null);
+    postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
+
+    await runHandler();
+
+    expect(fetchWeather).toHaveBeenCalledTimes(3);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(postMessage.mock.calls[0][0].text).toBe('🏀 today?');
   });
 
   test('notifies failure and rethrows when chat.postMessage throws', async () => {
@@ -56,7 +96,7 @@ describe('postMessage handler', () => {
     const boom = new Error('slack down');
     postMessage.mockRejectedValue(boom);
 
-    await expect(handler({})).rejects.toThrow('slack down');
+    await expect(runHandler()).rejects.toThrow('slack down');
 
     expect(notifyFailure).toHaveBeenCalledTimes(1);
     const ctx = notifyFailure.mock.calls[0][0];
@@ -70,7 +110,7 @@ describe('postMessage handler', () => {
     postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    await handler({});
+    await runHandler();
 
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(postMessage.mock.calls[0][0].text).toBe('🏀 today?');
@@ -82,7 +122,7 @@ describe('postMessage handler', () => {
     fetchWeather.mockResolvedValue({ icon: '☀️', tempF: 72, description: 'Clear sky' });
     postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
 
-    await handler({});
+    await runHandler();
 
     expect(postMessage).toHaveBeenCalledTimes(2);
     const channels = postMessage.mock.calls.map((c) => c[0].channel);
@@ -99,7 +139,7 @@ describe('postMessage handler', () => {
       .mockRejectedValueOnce(new Error('slack down'))
       .mockResolvedValueOnce({ ok: true, ts: '1.2' });
 
-    await handler({});
+    await runHandler();
 
     expect(postMessage).toHaveBeenCalledTimes(2);
     expect(notifyFailure).toHaveBeenCalledTimes(1);
@@ -113,7 +153,7 @@ describe('postMessage handler', () => {
     fetchWeather.mockResolvedValue(null);
     postMessage.mockRejectedValue(new Error('slack down'));
 
-    await expect(handler({})).rejects.toThrow('slack down');
+    await expect(runHandler()).rejects.toThrow('slack down');
 
     expect(postMessage).toHaveBeenCalledTimes(2);
     expect(notifyFailure).toHaveBeenCalledTimes(2);

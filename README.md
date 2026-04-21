@@ -32,7 +32,7 @@ Renders as:
 - The bot posts the user's text verbatim — no auto-prepended emoji. Type `:basketball:` (or any other emoji) yourself if you want one in the header.
 - `/ball` posts only to the channel where the command was invoked; the multi-channel `SLACK_CHANNELS` fanout only applies to the scheduled post.
 - Empty invocations (`/ball` with no text) respond with an ephemeral usage hint.
-- Weather fetch uses a 2-second timeout (vs. 3s for the scheduled post) to stay inside Slack's 3-second slash command deadline; on timeout the message posts without the weather line.
+- Weather fetch uses a 2-second timeout (vs. 8s for the scheduled post) to stay inside Slack's 3-second slash command deadline; on timeout the message posts without the weather line.
 - Reactions on `/ball` posts work identically to scheduled posts — the existing header is preserved on rewrite.
 
 To fix a typo or change the time after posting, run:
@@ -216,4 +216,4 @@ Create a `production` environment in **Settings → Environments** and add deplo
 
 - **Scheduling:** the cron runs on EventBridge Scheduler with `ScheduleExpressionTimezone: America/New_York`, so 8:00 AM ET stays fixed year-round across DST transitions.
 - **Stateless:** no DB. Every reaction event re-fetches the full reaction state, so a dropped event self-heals on the next reaction.
-- **Weather fallback:** if the NWS API fails or times out (3s), the bot posts without the weather line.
+- **Weather fallback:** the scheduled post retries the NWS fetch up to 3 times (8s timeout each, 500ms between attempts) so a transient NWS hiccup doesn't drop the weather line. Only after all 3 attempts fail does the bot post without weather.

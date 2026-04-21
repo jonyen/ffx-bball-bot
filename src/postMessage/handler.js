@@ -3,17 +3,29 @@ import { formatMessage } from '../shared/formatMessage.js';
 import { postMessage, notifyFailure, parseChannels } from '../shared/slack.js';
 
 const EMPTY_ROSTER = { in: [], out: [], maybe: [] };
+const WEATHER_MAX_ATTEMPTS = 3;
+const WEATHER_RETRY_DELAY_MS = 500;
+
+async function fetchWeatherWithRetry() {
+  for (let attempt = 1; attempt <= WEATHER_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const result = await fetchWeather();
+      if (result) return result;
+    } catch (err) {
+      console.error(`weather fetch attempt ${attempt} failed`, err);
+    }
+    if (attempt < WEATHER_MAX_ATTEMPTS) {
+      await new Promise((resolve) => setTimeout(resolve, WEATHER_RETRY_DELAY_MS));
+    }
+  }
+  return null;
+}
 
 export async function handler(_event) {
   const token = process.env.SLACK_BOT_TOKEN;
   const channels = parseChannels(process.env.SLACK_CHANNELS);
 
-  let weather = null;
-  try {
-    weather = await fetchWeather();
-  } catch (err) {
-    console.error('weather fetch failed', err);
-  }
+  const weather = await fetchWeatherWithRetry();
 
   const text = formatMessage(EMPTY_ROSTER, weather);
 

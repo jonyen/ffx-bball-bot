@@ -1,6 +1,11 @@
 import { fetchWeather } from './weather.js';
-import { formatMessage } from '../shared/formatMessage.js';
-import { postMessage, notifyFailure, parseChannels } from '../shared/slack.js';
+import { formatMessage, parseWeatherLine } from '../shared/formatMessage.js';
+import {
+  postMessage,
+  notifyFailure,
+  parseChannels,
+  getChannelHistory,
+} from '../shared/slack.js';
 
 const EMPTY_ROSTER = { in: [], out: [], maybe: [] };
 const WEATHER_MAX_ATTEMPTS = 3;
@@ -21,11 +26,33 @@ async function fetchWeatherWithRetry() {
   return null;
 }
 
+// When the live NWS fetch is unrecoverable, fall back to the weather line from
+// the most recent bot post in any channel. The line is preserved verbatim and
+// tagged "(cached)" so readers know it's stale.
+async function loadCachedWeatherLine({ token, channels, botUserId }) {
+  for (const channel of channels) {
+    try {
+      const history = await getChannelHistory({ token, channel, limit: 20 });
+      const target = (history?.messages ?? []).find((m) => m.user === botUserId);
+      const line = parseWeatherLine(target?.text ?? '');
+      if (line) return `${line} (cached)`;
+    } catch (err) {
+      console.error('cached-weather lookup failed', channel, err);
+    }
+  }
+  return null;
+}
+
 export async function handler(_event) {
   const token = process.env.SLACK_BOT_TOKEN;
+  const botUserId = process.env.SLACK_BOT_USER_ID;
   const channels = parseChannels(process.env.SLACK_CHANNELS);
 
-  const weather = await fetchWeatherWithRetry();
+  let weather = await fetchWeatherWithRetry();
+  if (!weather && botUserId) {
+    weather = await loadCachedWeatherLine({ token, channels, botUserId });
+    if (weather) console.warn('weather fetch failed; using cached line from prior post');
+  }
 
   const text = formatMessage(EMPTY_ROSTER, weather);
 

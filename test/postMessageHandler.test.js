@@ -8,13 +8,14 @@ vi.mock('../src/postMessage/weather.js', () => ({
 vi.mock('../src/shared/slack.js', () => ({
   postMessage: vi.fn(),
   notifyFailure: vi.fn(),
+  getChannelHistory: vi.fn(),
   parseChannels: (v) => (v ?? '').split(',').map((s) => s.trim()).filter(Boolean),
   FAILURE_DM_USER: 'U0000000000',
 }));
 
 import { handler } from '../src/postMessage/handler.js';
 import { fetchWeather } from '../src/postMessage/weather.js';
-import { postMessage, notifyFailure } from '../src/shared/slack.js';
+import { postMessage, notifyFailure, getChannelHistory } from '../src/shared/slack.js';
 
 // Fake timers skip the retry-delay sleeps inside the handler's weather
 // fetch without keeping the test suite waiting in real time.
@@ -29,7 +30,9 @@ beforeEach(() => {
   vi.useFakeTimers();
   process.env.SLACK_BOT_TOKEN = 'xoxb-test';
   process.env.SLACK_CHANNELS = 'C_TEST';
+  process.env.SLACK_BOT_USER_ID = 'UBOT';
   delete process.env.SLACK_CHANNEL;
+  getChannelHistory.mockResolvedValue({ messages: [] });
 });
 
 afterEach(() => {
@@ -89,6 +92,57 @@ describe('postMessage handler', () => {
     expect(fetchWeather).toHaveBeenCalledTimes(3);
     expect(postMessage).toHaveBeenCalledTimes(1);
     expect(postMessage.mock.calls[0][0].text).toBe('🏀 today?');
+  });
+
+  test('falls back to cached weather line from prior bot post when live fetch fails', async () => {
+    fetchWeather.mockResolvedValue(null);
+    getChannelHistory.mockResolvedValue({
+      messages: [
+        { user: 'UBOT', text: '🏀 today?\n\n──────────────\n☀️ Fairfax, VA — 70°F, Sunny' },
+      ],
+    });
+    postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
+
+    await runHandler();
+
+    const text = postMessage.mock.calls[0][0].text;
+    expect(text).toContain('☀️ Fairfax, VA — 70°F, Sunny (cached)');
+    expect(getChannelHistory).toHaveBeenCalledWith({
+      token: 'xoxb-test',
+      channel: 'C_TEST',
+      limit: 20,
+    });
+  });
+
+  test('cache lookup ignores non-bot messages and tries the next channel', async () => {
+    process.env.SLACK_CHANNELS = 'C_ONE,C_TWO';
+    fetchWeather.mockResolvedValue(null);
+    getChannelHistory
+      .mockResolvedValueOnce({ messages: [{ user: 'UHUMAN', text: 'hi' }] })
+      .mockResolvedValueOnce({
+        messages: [
+          { user: 'UBOT', text: '🏀 today?\n\n──────────────\n⛅ Fairfax, VA — 65°F, Partly Sunny' },
+        ],
+      });
+    postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
+
+    await runHandler();
+
+    const texts = postMessage.mock.calls.map((c) => c[0].text);
+    expect(texts[0]).toContain('65°F, Partly Sunny (cached)');
+    expect(texts[1]).toBe(texts[0]);
+  });
+
+  test('cache lookup tolerates getChannelHistory throwing', async () => {
+    fetchWeather.mockResolvedValue(null);
+    getChannelHistory.mockRejectedValue(new Error('slack 500'));
+    postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await runHandler();
+
+    expect(postMessage.mock.calls[0][0].text).toBe('🏀 today?');
+    errSpy.mockRestore();
   });
 
   test('notifies failure and rethrows when chat.postMessage throws', async () => {

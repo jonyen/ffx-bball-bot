@@ -1,6 +1,5 @@
 import { verifySignature } from '../reactionHandler/verifySignature.js';
 import { categorize } from '../reactionHandler/categorize.js';
-import { fetchWeather } from '../postMessage/weather.js';
 import { formatMessage } from '../shared/formatMessage.js';
 import {
   postMessage,
@@ -13,9 +12,24 @@ import {
 } from '../shared/slack.js';
 import { getSchedule, updateSchedule } from '../shared/scheduler.js';
 import { parseScheduleInput } from '../shared/scheduleParser.js';
+import { invokeAsync } from '../shared/invokeLambda.js';
 
 const EMPTY_ROSTER = { in: [], out: [], maybe: [] };
-const WEATHER_TIMEOUT_MS = 2000;
+
+// Post the message without weather first, then fill the weather line in via an
+// async worker. Slack slash commands must get an HTTP 200 within 3s; the NWS
+// fetch is too slow to do inline (it caused `operation_timeout` errors).
+async function scheduleWeatherEdit({ channel, ts }) {
+  const functionName = process.env.WEATHER_EDIT_FUNCTION;
+  if (!functionName) return;
+  try {
+    await invokeAsync({ functionName, payload: { channel, ts } });
+  } catch (err) {
+    // Non-fatal: the message is already posted, it just won't gain a weather
+    // line. Don't await notifyFailure here — it would add latency to the 200.
+    console.error('weatherEdit invoke failed', err);
+  }
+}
 
 const USAGE_HELP = [
   '*Usage*',
@@ -300,21 +314,12 @@ async function handleEdit({
     console.error('users.info fetch failed', err);
   }
 
-  let weather = null;
-  try {
-    weather = await fetchWeather({
-      timeoutMs: WEATHER_TIMEOUT_MS,
-      target: 'now',
-    });
-  } catch (err) {
-    console.error('weather fetch failed', err);
-  }
-
   const headerText = `${editText} (${displayName})`;
-  const newBody = formatMessage(roster, weather, { headerText });
+  const newBody = formatMessage(roster, null, { headerText });
 
   try {
     await updateMessage({ token, channel: channelId, ts, text: newBody });
+    await scheduleWeatherEdit({ channel: channelId, ts });
     return response(200);
   } catch (err) {
     await notifyFailure({
@@ -418,21 +423,11 @@ export async function handler(event) {
   }
 
   const headerText = `${text} (${displayName})`;
-
-  let weather = null;
-  try {
-    weather = await fetchWeather({
-      timeoutMs: WEATHER_TIMEOUT_MS,
-      target: 'now',
-    });
-  } catch (err) {
-    console.error('weather fetch failed', err);
-  }
-
-  const body = formatMessage(EMPTY_ROSTER, weather, { headerText });
+  const body = formatMessage(EMPTY_ROSTER, null, { headerText });
 
   try {
-    await postMessage({ token, channel: channelId, text: body });
+    const posted = await postMessage({ token, channel: channelId, text: body });
+    await scheduleWeatherEdit({ channel: posted.channel ?? channelId, ts: posted.ts });
     return response(200);
   } catch (err) {
     await notifyFailure({

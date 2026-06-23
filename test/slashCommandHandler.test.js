@@ -25,6 +25,10 @@ vi.mock('../src/shared/scheduler.js', () => ({
   updateSchedule: vi.fn(),
 }));
 
+vi.mock('../src/shared/invokeLambda.js', () => ({
+  invokeAsync: vi.fn(),
+}));
+
 // scheduleParser is pure JS with no AWS SDK deps — use the real implementation
 // so handler tests exercise the same parser that runs in production.
 
@@ -40,6 +44,7 @@ import {
   updateMessage,
 } from '../src/shared/slack.js';
 import { getSchedule, updateSchedule } from '../src/shared/scheduler.js';
+import { invokeAsync } from '../src/shared/invokeLambda.js';
 
 function userInfoResponse({ display_name = '', real_name = '' } = {}) {
   return { ok: true, user: { id: 'U123', name: 'alice', profile: { display_name, real_name } } };
@@ -69,8 +74,10 @@ beforeEach(() => {
   process.env.SLACK_BOT_USER_ID = 'U_BOT';
   process.env.SCHEDULE_NAME = 'ffx-bball-post-schedule';
   process.env.SCHEDULE_GROUP = 'default';
+  process.env.WEATHER_EDIT_FUNCTION = 'ffx-bball-weather-edit';
   verifySignature.mockReturnValue(true);
   getUserInfo.mockResolvedValue(userInfoResponse({ display_name: 'Alice' }));
+  invokeAsync.mockResolvedValue({});
 });
 
 describe('slashCommand handler', () => {
@@ -124,13 +131,8 @@ describe('slashCommand handler', () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
-  test('posts a message with custom header, display name attribution, and weather', async () => {
-    fetchWeather.mockResolvedValue({
-      icon: '☀️',
-      tempF: 72,
-      description: 'Clear sky',
-    });
-    postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
+  test('posts a weather-less message immediately and fires the async weather-edit worker', async () => {
+    postMessage.mockResolvedValue({ ok: true, ts: '1.2', channel: 'C_CURRENT' });
 
     const res = await handler(
       event({
@@ -143,18 +145,41 @@ describe('slashCommand handler', () => {
     );
 
     expect(res.statusCode).toBe(200);
-    expect(fetchWeather).toHaveBeenCalledWith({
-      timeoutMs: 2000,
-      target: 'now',
-    });
+    // Weather is NOT fetched synchronously — that's what blew the 3s deadline.
+    expect(fetchWeather).not.toHaveBeenCalled();
     expect(getUserInfo).toHaveBeenCalledWith({ token: 'xoxb-test', userId: 'U123' });
     expect(postMessage).toHaveBeenCalledTimes(1);
     const call = postMessage.mock.calls[0][0];
     expect(call.token).toBe('xoxb-test');
     expect(call.channel).toBe('C_CURRENT');
-    expect(call.text).toBe(
-      'tonight at 7pm, outdoor courts (Alice)\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky',
+    // No weather line — the worker adds it later.
+    expect(call.text).toBe('tonight at 7pm, outdoor courts (Alice)');
+
+    // Worker invoked with the posted message's channel + ts.
+    expect(invokeAsync).toHaveBeenCalledTimes(1);
+    expect(invokeAsync).toHaveBeenCalledWith({
+      functionName: 'ffx-bball-weather-edit',
+      payload: { channel: 'C_CURRENT', ts: '1.2' },
+    });
+  });
+
+  test('post path still returns 200 when the worker invoke fails', async () => {
+    postMessage.mockResolvedValue({ ok: true, ts: '1.2', channel: 'C_CURRENT' });
+    invokeAsync.mockRejectedValue(new Error('lambda throttled'));
+
+    const res = await handler(
+      event({
+        command: '/ball',
+        text: '7pm',
+        user_id: 'U123',
+        user_name: 'alice',
+        channel_id: 'C_CURRENT',
+      }),
     );
+
+    expect(res.statusCode).toBe(200);
+    expect(postMessage).toHaveBeenCalledTimes(1);
+    expect(notifyFailure).not.toHaveBeenCalled();
   });
 
   test('falls back to real_name when display_name is empty', async () => {
@@ -372,7 +397,7 @@ describe('slashCommand handler', () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
-  test('`/ball edit <text>` updates the most recent bot message with preserved roster', async () => {
+  test('`/ball edit <text>` updates the message (weather-less) and fires the weather-edit worker', async () => {
     process.env.SLACK_CHANNELS = 'C_ONE,C_TWO';
     getChannelHistory.mockResolvedValue({
       ok: true,
@@ -390,7 +415,6 @@ describe('slashCommand handler', () => {
         ],
       },
     });
-    fetchWeather.mockResolvedValue({ icon: '☀️', tempF: 70, description: 'Clear sky' });
     updateMessage.mockResolvedValue({ ok: true });
 
     const res = await handler(
@@ -420,20 +444,22 @@ describe('slashCommand handler', () => {
       ts: '2.0',
     });
 
-    // Weather re-fetched with the `now` target.
-    expect(fetchWeather).toHaveBeenCalledWith({
-      timeoutMs: 2000,
-      target: 'now',
-    });
+    // Weather is NOT fetched synchronously.
+    expect(fetchWeather).not.toHaveBeenCalled();
 
-    // chat.update called exactly once, only on the origin channel.
+    // chat.update called exactly once, only on the origin channel, with the
+    // preserved roster but no weather line yet.
     expect(updateMessage).toHaveBeenCalledTimes(1);
     const call = updateMessage.mock.calls[0][0];
     expect(call.channel).toBe('C_CURRENT');
     expect(call.ts).toBe('2.0');
-    expect(call.text).toBe(
-      '8pm instead (Alice)\n\nIn (1): <@U_HUMAN>\n\n──────────────\n☀️ Fairfax, VA — 70°F, Clear sky',
-    );
+    expect(call.text).toBe('8pm instead (Alice)\n\nIn (1): <@U_HUMAN>');
+
+    // Worker invoked to fill in weather on the edited message.
+    expect(invokeAsync).toHaveBeenCalledWith({
+      functionName: 'ffx-bball-weather-edit',
+      payload: { channel: 'C_CURRENT', ts: '2.0' },
+    });
 
     // Create-flow side effects never fire.
     expect(postMessage).not.toHaveBeenCalled();

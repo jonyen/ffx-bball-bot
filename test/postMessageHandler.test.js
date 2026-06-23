@@ -46,7 +46,7 @@ describe('postMessage handler', () => {
 
     await runHandler();
 
-    expect(fetchWeather).toHaveBeenCalledWith();
+    expect(fetchWeather).toHaveBeenCalledWith({ target: 'noon' });
     expect(postMessage).toHaveBeenCalledTimes(1);
     const call = postMessage.mock.calls[0][0];
     expect(call.token).toBe('xoxb-test');

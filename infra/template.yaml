@@ -120,6 +120,7 @@ Resources:
           SCHEDULE_GROUP: default
           GIT_SHA: !Ref GitSha
           GITHUB_RUN_NUMBER: !Ref GithubRunNumber
+          WEATHER_EDIT_FUNCTION: !Ref WeatherEditFunction
       Policies:
         - Statement:
             - Effect: Allow
@@ -130,6 +131,9 @@ Resources:
             - Effect: Allow
               Action: iam:PassRole
               Resource: !GetAtt PostScheduleRole.Arn
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !GetAtt WeatherEditFunction.Arn
       Events:
         SlackCommand:
           Type: HttpApi
@@ -137,6 +141,19 @@ Resources:
             ApiId: !Ref SlackEventsApi
             Method: POST
             Path: /slack/commands
+
+  WeatherEditFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ffx-bball-weather-edit
+      CodeUri: ../src/
+      Handler: slashCommand/weatherEdit.handler
+      Description: >-
+        Async worker for /ball. Fetches weather out-of-band (with retry) and
+        edits the weather line into the already-posted roll-call message, so the
+        slash command can return its 200 to Slack within the 3s deadline.
+      # Headroom for up to 3 weather-fetch attempts (8s each) before editing.
+      Timeout: 30
 
   SlackEventsApi:
     Type: AWS::Serverless::HttpApi

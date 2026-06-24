@@ -35,7 +35,7 @@ const USAGE_HELP = [
   '*Usage*',
   '• `/ball <message>` — post a new bball message',
   '• `/ball edit <message>` — edit the most recent bball message',
-  '• `/ball delete` — delete the most recent bball message',
+  '• `/ball delete <message link or timestamp>` — delete a specific bball message',
   '• `/ball schedule` — show the current schedule',
   '• `/ball schedule <desired schedule>` — update the schedule using natural language (e.g. `every Tue, Thu at 8am`)',
   '• `/ball schedule pause` — pause the schedule',
@@ -200,37 +200,46 @@ async function handleSchedule({
   );
 }
 
-async function handleDelete({ token, botUserId, channelId, userId }) {
-  if (!channelId) {
-    return ephemeral('Could not determine the current channel.');
+// Parse a `/ball delete` argument into an explicit message reference.
+// Accepts a Slack archive link (…/archives/<channel>/p<digits>) or a bare
+// message timestamp (1782227415.336489). Returns null when no target is given
+// (caller shows usage), undefined when the argument is present but unparseable.
+export function parseMessageRef(arg) {
+  const trimmed = (arg ?? '').trim();
+  if (!trimmed) return null;
+
+  const link = /\/archives\/([A-Z0-9]+)\/p(\d{10})(\d{6})\b/i.exec(trimmed);
+  if (link) {
+    return { channel: link[1], ts: `${link[2]}.${link[3]}` };
   }
 
-  let history;
+  const tsMatch = /^(\d{10})\.(\d{6})$/.exec(trimmed);
+  if (tsMatch) {
+    return { channel: null, ts: `${tsMatch[1]}.${tsMatch[2]}` };
+  }
+
+  // p1782227415336489 pasted without the surrounding link.
+  const bare = /^p?(\d{10})(\d{6})$/.exec(trimmed);
+  if (bare) {
+    return { channel: null, ts: `${bare[1]}.${bare[2]}` };
+  }
+
+  return undefined;
+}
+
+async function handleDeleteRef({ token, channelId, ts, userId }) {
   try {
-    history = await getChannelHistory({ token, channel: channelId, limit: 20 });
+    await deleteMessage({ token, channel: channelId, ts });
+    return ephemeral('🗑️ Deleted that bball message.');
   } catch (err) {
-    await notifyFailure({
-      token,
-      error: err,
-      context: {
-        lambda: 'slashCommand',
-        phase: 'conversations.history',
-        channel: channelId,
-        user: userId,
-      },
-    });
-    return response(500, 'internal error');
-  }
-
-  const target = (history.messages ?? []).find((m) => m.user === botUserId);
-  if (!target) {
-    return ephemeral('No recent bball message to delete in this channel.');
-  }
-
-  try {
-    await deleteMessage({ token, channel: channelId, ts: target.ts });
-    return ephemeral('🗑️ Deleted the most recent bball message.');
-  } catch (err) {
+    if (err.slackError === 'message_not_found') {
+      return ephemeral(
+        'Could not find that message in this channel. Make sure the link points here, or run `/ball delete` from the channel the message is in.',
+      );
+    }
+    if (err.slackError === 'cant_delete_message') {
+      return ephemeral('I can only delete messages I posted.');
+    }
     await notifyFailure({
       token,
       error: err,
@@ -238,12 +247,31 @@ async function handleDelete({ token, botUserId, channelId, userId }) {
         lambda: 'slashCommand',
         phase: 'chat.delete',
         channel: channelId,
-        ts: target.ts,
+        ts,
         user: userId,
       },
     });
     return ephemeral(`Delete failed: ${err.message}`);
   }
+}
+
+const DELETE_USAGE =
+  'Usage: `/ball delete <message link or timestamp>` — e.g. `/ball delete https://…/archives/C…/p1782227415336489`. Copy the link via a message’s ⋯ menu → *Copy link*.';
+
+async function handleDelete({ token, channelId, userId, arg }) {
+  const ref = parseMessageRef(arg);
+  if (ref === null) {
+    return ephemeral(DELETE_USAGE);
+  }
+  if (ref === undefined) {
+    return ephemeral(`Could not parse that.\n\n${DELETE_USAGE}`);
+  }
+
+  const channel = ref.channel ?? channelId;
+  if (!channel) {
+    return ephemeral('Could not determine the channel to delete from.');
+  }
+  return handleDeleteRef({ token, channelId: channel, ts: ref.ts, userId });
 }
 
 async function handleEdit({
@@ -371,12 +399,13 @@ export async function handler(event) {
     });
   }
 
-  if (/^delete\s*$/i.test(text)) {
+  const deleteMatch = /^delete(\s+(.*))?$/i.exec(text);
+  if (deleteMatch) {
     return handleDelete({
       token,
-      botUserId: process.env.SLACK_BOT_USER_ID,
       channelId,
       userId,
+      arg: (deleteMatch[2] ?? '').trim(),
     });
   }
 

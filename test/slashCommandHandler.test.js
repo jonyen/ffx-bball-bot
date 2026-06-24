@@ -17,6 +17,7 @@ vi.mock('../src/shared/slack.js', () => ({
   getChannelHistory: vi.fn(),
   getReactions: vi.fn(),
   updateMessage: vi.fn(),
+  deleteMessage: vi.fn(),
   FAILURE_DM_USER: 'U05SWHWFTEH',
 }));
 
@@ -42,7 +43,9 @@ import {
   getChannelHistory,
   getReactions,
   updateMessage,
+  deleteMessage,
 } from '../src/shared/slack.js';
+import { parseMessageRef } from '../src/slashCommand/handler.js';
 import { getSchedule, updateSchedule } from '../src/shared/scheduler.js';
 import { invokeAsync } from '../src/shared/invokeLambda.js';
 
@@ -863,5 +866,132 @@ describe('slashCommand handler', () => {
       expect(notifyFailure).not.toHaveBeenCalled();
     });
 
+  });
+
+  describe('parseMessageRef', () => {
+    test('parses a Slack archive link into channel + ts', () => {
+      expect(
+        parseMessageRef(
+          'https://dmvwide.slack.com/archives/C03H7SUSUTZ/p1782227415336489',
+        ),
+      ).toEqual({ channel: 'C03H7SUSUTZ', ts: '1782227415.336489' });
+    });
+
+    test('parses a thread link with query params', () => {
+      expect(
+        parseMessageRef(
+          'https://x.slack.com/archives/C03H7SUSUTZ/p1782227415336489?thread_ts=1.2&cid=C03H7SUSUTZ',
+        ),
+      ).toEqual({ channel: 'C03H7SUSUTZ', ts: '1782227415.336489' });
+    });
+
+    test('parses a bare dotted timestamp (channel from context)', () => {
+      expect(parseMessageRef('1782227415.336489')).toEqual({
+        channel: null,
+        ts: '1782227415.336489',
+      });
+    });
+
+    test('parses a pasted p-prefixed id', () => {
+      expect(parseMessageRef('p1782227415336489')).toEqual({
+        channel: null,
+        ts: '1782227415.336489',
+      });
+    });
+
+    test('returns null for empty input', () => {
+      expect(parseMessageRef('')).toBeNull();
+      expect(parseMessageRef('   ')).toBeNull();
+    });
+
+    test('returns undefined for unparseable input', () => {
+      expect(parseMessageRef('garbage')).toBeUndefined();
+    });
+  });
+
+  describe('delete command', () => {
+    test('shows usage when no target is given', async () => {
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'delete',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+      const body = JSON.parse(res.body);
+      expect(body.response_type).toBe('ephemeral');
+      expect(body.text).toMatch(/Usage/);
+      expect(deleteMessage).not.toHaveBeenCalled();
+    });
+
+    test('deletes a message by archive link using the link channel', async () => {
+      deleteMessage.mockResolvedValue({ ok: true });
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'delete https://dmvwide.slack.com/archives/C03OTHER01/p1782227415336489',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+      expect(deleteMessage).toHaveBeenCalledWith({
+        token: 'xoxb-test',
+        channel: 'C03OTHER01',
+        ts: '1782227415.336489',
+      });
+      expect(JSON.parse(res.body).text).toMatch(/Deleted/);
+    });
+
+    test('deletes a bare timestamp using the current channel', async () => {
+      deleteMessage.mockResolvedValue({ ok: true });
+      await handler(
+        event({
+          command: '/ball',
+          text: 'delete 1782227415.336489',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+      expect(deleteMessage).toHaveBeenCalledWith({
+        token: 'xoxb-test',
+        channel: 'C_CURRENT',
+        ts: '1782227415.336489',
+      });
+    });
+
+    test('reports a friendly message when Slack says message_not_found', async () => {
+      const err = new Error('Slack chat.delete error: message_not_found');
+      err.slackError = 'message_not_found';
+      deleteMessage.mockRejectedValue(err);
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'delete 1782227415.336489',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+      expect(JSON.parse(res.body).text).toMatch(/Could not find that message/);
+      expect(notifyFailure).not.toHaveBeenCalled();
+    });
+
+    test('rejects unparseable target without calling Slack', async () => {
+      const res = await handler(
+        event({
+          command: '/ball',
+          text: 'delete garbage',
+          user_id: 'U123',
+          user_name: 'alice',
+          channel_id: 'C_CURRENT',
+        }),
+      );
+      expect(JSON.parse(res.body).text).toMatch(/Could not parse/);
+      expect(deleteMessage).not.toHaveBeenCalled();
+    });
   });
 });

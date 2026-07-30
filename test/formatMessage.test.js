@@ -17,7 +17,7 @@ describe('formatMessage', () => {
   test('initial message (no reactions) includes weather', () => {
     const msg = formatMessage(EMPTY, WEATHER);
     expect(msg).toBe(
-      '🏀 today?\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky',
+      '🏀 today?\n\n──────────────\n☀️ Nottoway Park — 72°F, Clear sky',
     );
   });
 
@@ -65,7 +65,7 @@ describe('formatMessage', () => {
         'Maybe (1): <@U012>\n' +
         'Out: <@U789>\n\n' +
         '──────────────\n' +
-        '☀️ Fairfax, VA — 72°F, Clear sky',
+        '☀️ Nottoway Park — 72°F, Clear sky',
     );
   });
 
@@ -78,13 +78,13 @@ describe('formatMessage', () => {
 describe('parseWeatherLine', () => {
   test('extracts the weather line from a formatted message', () => {
     const msg =
-      '🏀 today?\n\nIn (1): <@U1>\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky';
-    expect(parseWeatherLine(msg)).toBe('☀️ Fairfax, VA — 72°F, Clear sky');
+      '🏀 today?\n\nIn (1): <@U1>\n\n──────────────\n☀️ Nottoway Park — 72°F, Clear sky';
+    expect(parseWeatherLine(msg)).toBe('☀️ Nottoway Park — 72°F, Clear sky');
   });
 
   test('extracts the weather line from an initial (no-reaction) message', () => {
-    const msg = '🏀 today?\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky';
-    expect(parseWeatherLine(msg)).toBe('☀️ Fairfax, VA — 72°F, Clear sky');
+    const msg = '🏀 today?\n\n──────────────\n☀️ Nottoway Park — 72°F, Clear sky';
+    expect(parseWeatherLine(msg)).toBe('☀️ Nottoway Park — 72°F, Clear sky');
   });
 
   test('returns null when the message has no weather block', () => {
@@ -95,10 +95,10 @@ describe('parseWeatherLine', () => {
 
 describe('formatMessage with raw weather line', () => {
   test('accepts a pre-formatted weather line string', () => {
-    const rawLine = '🌧️ Fairfax, VA — 58°F, Light rain';
+    const rawLine = '🌧️ Nottoway Park — 58°F, Light rain';
     const msg = formatMessage({ in: ['U1'], out: [], maybe: [] }, rawLine);
     expect(msg).toBe(
-      '🏀 today?\n\nIn (1): <@U1>\n\n──────────────\n🌧️ Fairfax, VA — 58°F, Light rain',
+      '🏀 today?\n\nIn (1): <@U1>\n\n──────────────\n🌧️ Nottoway Park — 58°F, Light rain',
     );
   });
 });
@@ -109,7 +109,7 @@ describe('formatMessage with custom header', () => {
       headerText: 'tonight at 7pm? — <@U123>',
     });
     expect(msg).toBe(
-      'tonight at 7pm? — <@U123>\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky',
+      'tonight at 7pm? — <@U123>\n\n──────────────\n☀️ Nottoway Park — 72°F, Clear sky',
     );
   });
 

@@ -98,7 +98,7 @@ describe('postMessage handler', () => {
     fetchWeather.mockResolvedValue(null);
     getChannelHistory.mockResolvedValue({
       messages: [
-        { user: 'UBOT', text: '🏀 today?\n\n──────────────\n☀️ Fairfax, VA — 70°F, Sunny' },
+        { user: 'UBOT', text: '🏀 today?\n\n──────────────\n☀️ Nottoway Park — 70°F, Sunny' },
       ],
     });
     postMessage.mockResolvedValue({ ok: true, ts: '1.2' });
@@ -106,7 +106,7 @@ describe('postMessage handler', () => {
     await runHandler();
 
     const text = postMessage.mock.calls[0][0].text;
-    expect(text).toContain('☀️ Fairfax, VA — 70°F, Sunny (cached)');
+    expect(text).toContain('☀️ Nottoway Park — 70°F, Sunny (cached)');
     expect(getChannelHistory).toHaveBeenCalledWith({
       token: 'xoxb-test',
       channel: 'C_TEST',
@@ -121,7 +121,7 @@ describe('postMessage handler', () => {
       .mockResolvedValueOnce({ messages: [{ user: 'UHUMAN', text: 'hi' }] })
       .mockResolvedValueOnce({
         messages: [
-          { user: 'UBOT', text: '🏀 today?\n\n──────────────\n⛅ Fairfax, VA — 65°F, Partly Sunny' },
+          { user: 'UBOT', text: '🏀 today?\n\n──────────────\n⛅ Nottoway Park — 65°F, Partly Sunny' },
         ],
       });
     postMessage.mockResolvedValue({ ok: true, ts: '1.2' });

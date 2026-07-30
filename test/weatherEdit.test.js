@@ -49,7 +49,7 @@ describe('weatherEdit worker', () => {
     });
     expect(updateMessage).toHaveBeenCalledTimes(1);
     expect(updateMessage.mock.calls[0][0].text).toBe(
-      '🏀 tonight at 7pm (Alice)\n\nIn (1): <@U_HUMAN>\n\n──────────────\n☀️ Fairfax, VA — 70°F, Clear sky',
+      '🏀 tonight at 7pm (Alice)\n\nIn (1): <@U_HUMAN>\n\n──────────────\n☀️ Nottoway Park — 70°F, Clear sky',
     );
   });
 

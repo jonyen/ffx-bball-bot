@@ -108,7 +108,7 @@ describe('reactionHandler', () => {
       messages: [
         {
           user: BOT,
-          text: '🏀 today?\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky',
+          text: '🏀 today?\n\n──────────────\n☀️ Nottoway Park — 72°F, Clear sky',
           ts: '1.2',
         },
       ],
@@ -140,7 +140,7 @@ describe('reactionHandler', () => {
     expect(call.ts).toBe('1.2');
     expect(call.text).toContain('In (2): <@U1>, <@U2>');
     expect(call.text).toContain('Out: <@U3>');
-    expect(call.text).toContain('☀️ Fairfax, VA — 72°F, Clear sky');
+    expect(call.text).toContain('☀️ Nottoway Park — 72°F, Clear sky');
   });
 
   test('treats reaction_removed the same as reaction_added', async () => {
@@ -191,7 +191,7 @@ describe('reactionHandler', () => {
         {
           user: BOT,
           text:
-            '🏀 tonight at 7pm? — <@U123>\n\n──────────────\n☀️ Fairfax, VA — 72°F, Clear sky',
+            '🏀 tonight at 7pm? — <@U123>\n\n──────────────\n☀️ Nottoway Park — 72°F, Clear sky',
           ts: '1.2',
         },
       ],
@@ -216,7 +216,7 @@ describe('reactionHandler', () => {
     const text = updateMessage.mock.calls[0][0].text;
     expect(text).toContain('🏀 tonight at 7pm? — <@U123>');
     expect(text).toContain('In (1): <@U1>');
-    expect(text).toContain('☀️ Fairfax, VA — 72°F, Clear sky');
+    expect(text).toContain('☀️ Nottoway Park — 72°F, Clear sky');
     expect(text).not.toContain('🏀 today?');
   });
 

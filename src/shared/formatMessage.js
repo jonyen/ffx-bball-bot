@@ -4,7 +4,7 @@ const DIVIDER = '──────────────';
 function weatherLine(weather) {
   if (weather == null) return null;
   if (typeof weather === 'string') return weather;
-  return `${weather.icon} Fairfax, VA — ${weather.tempF}°F, ${weather.description}`;
+  return `${weather.icon} Nottoway Park — ${weather.tempF}°F, ${weather.description}`;
 }
 
 function mentions(users) {

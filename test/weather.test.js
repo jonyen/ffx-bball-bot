@@ -49,7 +49,7 @@ describe('noonEtMsFor', () => {
 
 describe('fetchWeather', () => {
   const ORIGINAL_FETCH = globalThis.fetch;
-  const POINTS_URL = 'https://api.weather.gov/points/38.8462,-77.3064';
+  const POINTS_URL = 'https://api.weather.gov/points/38.887947,-77.275015';
   const HOURLY_URL = 'https://api.weather.gov/gridpoints/LWX/96,70/forecast/hourly';
 
   beforeEach(() => {
@@ -82,7 +82,7 @@ describe('fetchWeather', () => {
     return { startTime, temperature, temperatureUnit: 'F', shortForecast };
   }
 
-  test('calls NWS points endpoint for Fairfax, then follows the forecastHourly URL', async () => {
+  test('calls NWS points endpoint for Nottoway Park, then follows the forecastHourly URL', async () => {
     mockNws([period('2026-04-14T12:00:00-04:00', 79, 'Sunny')]);
 
     await fetchWeather();

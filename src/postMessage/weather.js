@@ -1,7 +1,8 @@
-const FAIRFAX_LAT = 38.8462;
-const FAIRFAX_LON = -77.3064;
+// Nottoway Park, Vienna, VA (9537 Courthouse Rd)
+const NOTTOWAY_LAT = 38.887947;
+const NOTTOWAY_LON = -77.275015;
 const DEFAULT_TIMEOUT_MS = 8000;
-const POINTS_URL = `https://api.weather.gov/points/${FAIRFAX_LAT},${FAIRFAX_LON}`;
+const POINTS_URL = `https://api.weather.gov/points/${NOTTOWAY_LAT},${NOTTOWAY_LON}`;
 const USER_AGENT = 'ffx-bball-bot (https://github.com/jonyen/ffx-bball-bot)';
 
 // Order matters: more specific rules first so "Mostly Sunny" doesn't fall

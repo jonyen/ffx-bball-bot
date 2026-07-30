@@ -1,6 +1,6 @@
 # ffx-bball-bot
 
-Slack bot that posts a basketball roll-call to a channel twice a week (Tue/Thu 8am EST) and tracks RSVPs via emoji reactions. Weather for Fairfax, VA is baked into the initial post.
+Slack bot that posts a basketball roll-call to a channel twice a week (Tue/Thu 8am EST) and tracks RSVPs via emoji reactions. Weather for Nottoway Park is baked into the initial post.
 
 Design doc: `docs/superpowers/specs/2026-04-09-basketball-slack-bot-design.md`
 
@@ -26,7 +26,7 @@ Renders as:
 🏀 tonight at 7pm, outdoor courts (alice)
 
 ──────────────
-☀️ Fairfax, VA — 72°F, Clear sky
+☀️ Nottoway Park — 72°F, Clear sky
 ```
 
 - The bot posts the user's text verbatim — no auto-prepended emoji. Type `:basketball:` (or any other emoji) yourself if you want one in the header.

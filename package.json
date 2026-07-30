@@ -2,7 +2,7 @@
   "name": "ffx-bball-bot",
   "version": "0.1.0",
   "private": true,
-  "description": "Slack bot that posts a basketball roll-call for Fairfax, VA twice a week and tracks RSVPs via reactions",
+  "description": "Slack bot that posts a basketball roll-call for Nottoway Park, Vienna, VA twice a week and tracks RSVPs via reactions",
   "type": "module",
   "engines": {
     "node": ">=24"

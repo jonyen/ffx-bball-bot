@@ -19,10 +19,16 @@ Parameters:
     Description: Comma-separated list of target Slack channel IDs
   FailureDmUser:
     Type: String
-    Description: Slack user ID DMed on unrecoverable failures
+    Default: ""
+    Description: >-
+      Slack user ID DMed on unrecoverable failures. Optional — unset means
+      failure notices are logged instead of sent.
   AlarmChannel:
     Type: String
-    Description: Slack channel ID that CloudWatch alarm notifications are posted to
+    Default: ""
+    Description: >-
+      Slack channel ID for CloudWatch alarm notifications. Optional — unset
+      means alarms still fire to SNS but are not relayed to Slack.
   ScheduleExpression:
     Type: String
     Default: cron(0 8 ? * TUE,THU *)

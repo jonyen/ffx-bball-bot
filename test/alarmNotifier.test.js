@@ -69,6 +69,12 @@ describe('alarm notifier', () => {
     expect(postMessage.mock.calls[0][0].text).toContain('plain string alert');
   });
 
+  test('logs instead of posting when no alarm channel is configured', async () => {
+    delete process.env.ALARM_CHANNEL;
+    await expect(handler(snsEvent(ALARM))).resolves.not.toThrow();
+    expect(postMessage).not.toHaveBeenCalled();
+  });
+
   test('never throws when Slack is the thing that is down', async () => {
     postMessage.mockRejectedValueOnce(new Error('slack unreachable'));
     await expect(handler(snsEvent(ALARM))).resolves.not.toThrow();

@@ -42,6 +42,18 @@ export async function handler(event) {
   const channel = process.env.ALARM_CHANNEL;
   const records = event?.Records ?? [];
 
+  // ALARM_CHANNEL is optional, so the alarm still reaches SNS (and any email
+  // subscriber) even when Slack relay is not configured. Log the alarm rather
+  // than dropping it silently.
+  if (!channel) {
+    for (const record of records) {
+      log.warn('ALARM_CHANNEL is unset; alarm not relayed to Slack', {
+        alarm: record?.Sns?.Message,
+      });
+    }
+    return;
+  }
+
   // allSettled, not all: one undeliverable alarm must not swallow the others.
   await Promise.allSettled(
     records.map(async (record) => {

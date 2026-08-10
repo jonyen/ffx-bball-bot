@@ -84,13 +84,126 @@ Resources:
                 token.actions.githubusercontent.com:aud: sts.amazonaws.com
               StringLike:
                 token.actions.githubusercontent.com:sub: !Sub 'repo:${GitHubOrg}/${GitHubRepo}:${SubjectFilter}'
-      ManagedPolicyArns:
-        # AdministratorAccess is permissive but pragmatic for a personal
-        # project — SAM deploys need to create IAM roles, Lambda functions,
-        # API Gateway, CloudFormation stacks, S3 artifact buckets, and the
-        # EventBridge Scheduler resource. Swap to a tighter custom policy
-        # later if you want least-privilege.
-        - arn:aws:iam::aws:policy/AdministratorAccess
+      # Scoped to what a SAM deploy of this stack actually touches, rather than
+      # AdministratorAccess. Every resource in the app template is named
+      # ffx-bball-*, which makes prefix scoping practical.
+      #
+      # The IAM statement enumerates actions instead of using iam:*, and is
+      # scoped to ffx-bball-bot-* — which excludes this role itself
+      # (ffx-bball-bot, no trailing hyphen), so a compromised workflow cannot
+      # widen its own permissions.
+      Policies:
+        - PolicyName: deploy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: CloudFormationStacks
+                Effect: Allow
+                Action: cloudformation:*
+                Resource:
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/ffx-bball-bot/*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/aws-sam-cli-managed-default/*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:changeSet/*'
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31'
+              - Sid: CloudFormationReadOnlyGlobals
+                Effect: Allow
+                Action:
+                  - cloudformation:ValidateTemplate
+                  - cloudformation:ListStacks
+                  - cloudformation:DescribeStacks
+                Resource: '*'
+              - Sid: SamArtifactBucket
+                Effect: Allow
+                Action: s3:*
+                Resource:
+                  - 'arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*'
+                  - 'arn:aws:s3:::aws-sam-cli-managed-default-samclisourcebucket-*/*'
+              - Sid: ListBucketsForSam
+                Effect: Allow
+                Action:
+                  - s3:ListAllMyBuckets
+                  - s3:GetBucketLocation
+                  - s3:CreateBucket
+                Resource: '*'
+              - Sid: Functions
+                Effect: Allow
+                Action: lambda:*
+                Resource:
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ffx-bball-*'
+                  - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:ffx-bball-*:*'
+              - Sid: LambdaAccountReads
+                Effect: Allow
+                Action:
+                  - lambda:GetAccountSettings
+                  - lambda:ListFunctions
+                Resource: '*'
+              - Sid: FunctionRoles
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:GetRolePolicy
+                  - iam:ListRolePolicies
+                  - iam:ListAttachedRolePolicies
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:UpdateAssumeRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                  - iam:PassRole
+                Resource: !Sub 'arn:aws:iam::${AWS::AccountId}:role/ffx-bball-bot-*'
+              - Sid: HttpApi
+                Effect: Allow
+                Action: apigateway:*
+                Resource: !Sub 'arn:aws:apigateway:${AWS::Region}::/*'
+              - Sid: PostSchedule
+                Effect: Allow
+                Action: scheduler:*
+                Resource: !Sub 'arn:aws:scheduler:${AWS::Region}:${AWS::AccountId}:schedule/default/ffx-bball-post-schedule'
+              - Sid: SchedulerReads
+                Effect: Allow
+                Action:
+                  - scheduler:ListSchedules
+                  - scheduler:ListScheduleGroups
+                Resource: '*'
+              - Sid: AlarmTopic
+                Effect: Allow
+                Action: sns:*
+                Resource: !Sub 'arn:aws:sns:${AWS::Region}:${AWS::AccountId}:ffx-bball-alarms'
+              - Sid: Alarms
+                Effect: Allow
+                Action:
+                  - cloudwatch:PutMetricAlarm
+                  - cloudwatch:DeleteAlarms
+                  - cloudwatch:EnableAlarmActions
+                  - cloudwatch:DisableAlarmActions
+                  - cloudwatch:TagResource
+                  - cloudwatch:UntagResource
+                  - cloudwatch:ListTagsForResource
+                Resource: !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:ffx-bball-*'
+              - Sid: AlarmAndDashboardReads
+                Effect: Allow
+                Action:
+                  - cloudwatch:DescribeAlarms
+                  - cloudwatch:PutDashboard
+                  - cloudwatch:DeleteDashboards
+                  - cloudwatch:GetDashboard
+                  - cloudwatch:ListDashboards
+                Resource: '*'
+              - Sid: FunctionLogGroups
+                Effect: Allow
+                Action: logs:*
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ffx-bball-*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/ffx-bball-*:*'
+              - Sid: LogGroupReads
+                Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                Resource: '*'
 
 Outputs:
   DeployRoleArn:

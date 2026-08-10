@@ -20,6 +20,9 @@ Parameters:
   FailureDmUser:
     Type: String
     Description: Slack user ID DMed on unrecoverable failures
+  AlarmChannel:
+    Type: String
+    Description: Slack channel ID that CloudWatch alarm notifications are posted to
   ScheduleExpression:
     Type: String
     Default: cron(0 8 ? * TUE,THU *)
@@ -158,6 +161,194 @@ Resources:
       # Headroom for up to 3 weather-fetch attempts (8s each) before editing.
       Timeout: 30
 
+  # ---------------------------------------------------------------------------
+  # Observability
+  #
+  # Alarms publish to SNS, and a dedicated Lambda relays them to Slack. Keeping
+  # the alert path off the bot's own code path matters: the alarms worth having
+  # are the ones that fire because the bot is broken. Subscribe an email address
+  # to this topic for a path that survives a Slack outage.
+  # ---------------------------------------------------------------------------
+  AlarmTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: ffx-bball-alarms
+      DisplayName: ffx-bball-bot alarms
+
+  AlarmNotifierFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: ffx-bball-alarm-notifier
+      CodeUri: ../src/
+      Handler: alarmNotifier/handler.handler
+      Description: Relays CloudWatch alarm state changes into Slack
+      Environment:
+        Variables:
+          ALARM_CHANNEL: !Ref AlarmChannel
+      Events:
+        Alarms:
+          Type: SNS
+          Properties:
+            Topic: !Ref AlarmTopic
+
+  # The SLI alarm. Lambda can finish cleanly having posted nothing, so error
+  # count alone never catches a silently dead scheduler; this watches the
+  # business outcome instead.
+  #
+  # Posts land Tue and Thu, so the longest healthy gap is Thu -> Tue: four
+  # consecutive zero days (Fri, Sat, Sun, Mon). Five is therefore the smallest
+  # window that cannot false-fire, and it surfaces a dead schedule roughly a day
+  # after the first missed Tuesday. Tightening this means encoding day-of-week,
+  # which CloudWatch alarms cannot express.
+  RollCallMissingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ffx-bball-roll-call-missing
+      AlarmDescription: >-
+        No roll call has posted for five consecutive days. Expected Tue and Thu,
+        so this means the schedule, the Lambda, or Slack posting is broken.
+      Namespace: FfxBballBot
+      MetricName: RollCallPosted
+      Dimensions:
+        - Name: Lambda
+          Value: postMessage
+      Statistic: Sum
+      Period: 86400
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 5
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions:
+        - !Ref AlarmTopic
+      OKActions:
+        - !Ref AlarmTopic
+
+  RollCallFailuresAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ffx-bball-roll-call-failures
+      AlarmDescription: A roll call failed to post to at least one channel.
+      Namespace: FfxBballBot
+      MetricName: RollCallFailed
+      Dimensions:
+        - Name: Lambda
+          Value: postMessage
+      Statistic: Sum
+      Period: 3600
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+
+  FunctionErrorsAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ffx-bball-function-errors
+      AlarmDescription: >-
+        A Lambda threw. Check the structured logs for the correlationId in the
+        same window.
+      Namespace: AWS/Lambda
+      MetricName: Errors
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref PostMessageFunction
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+
+  SlashCommandLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: ffx-bball-slash-command-slow
+      AlarmDescription: >-
+        /ball p99 is approaching Slack's 3s deadline. Past it, Slack shows the
+        user an operation_timeout even though the command succeeds.
+      Namespace: AWS/Lambda
+      MetricName: Duration
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref SlashCommandFunction
+      ExtendedStatistic: p99
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 2500
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+      AlarmActions:
+        - !Ref AlarmTopic
+
+  Dashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: ffx-bball-bot
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric", "x": 0, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "title": "Roll calls posted vs failed",
+                "region": "${AWS::Region}",
+                "stat": "Sum", "period": 86400,
+                "metrics": [
+                  [ "FfxBballBot", "RollCallPosted", "Lambda", "postMessage" ],
+                  [ ".", "RollCallFailed", ".", "." ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 12, "y": 0, "width": 12, "height": 6,
+              "properties": {
+                "title": "Errors by function",
+                "region": "${AWS::Region}",
+                "stat": "Sum", "period": 300,
+                "metrics": [
+                  [ "AWS/Lambda", "Errors", "FunctionName", "${PostMessageFunction}" ],
+                  [ "...", "${ReactionHandlerFunction}" ],
+                  [ "...", "${SlashCommandFunction}" ]
+                ]
+              }
+            },
+            {
+              "type": "metric", "x": 0, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "/ball latency (p50 / p99) against Slack's 3s deadline",
+                "region": "${AWS::Region}",
+                "period": 300,
+                "yAxis": { "left": { "min": 0 } },
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${SlashCommandFunction}", { "stat": "p50" } ],
+                  [ "...", { "stat": "p99" } ]
+                ],
+                "annotations": {
+                  "horizontal": [ { "label": "Slack deadline", "value": 3000 } ]
+                }
+              }
+            },
+            {
+              "type": "metric", "x": 12, "y": 6, "width": 12, "height": 6,
+              "properties": {
+                "title": "Invocations",
+                "region": "${AWS::Region}",
+                "stat": "Sum", "period": 3600,
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", "FunctionName", "${PostMessageFunction}" ],
+                  [ "...", "${ReactionHandlerFunction}" ],
+                  [ "...", "${SlashCommandFunction}" ]
+                ]
+              }
+            }
+          ]
+        }
+
   SlackEventsApi:
     Type: AWS::Serverless::HttpApi
     Properties:
@@ -176,3 +367,8 @@ Outputs:
     Value: !GetAtt ReactionHandlerFunction.Arn
   SlashCommandFunctionArn:
     Value: !GetAtt SlashCommandFunction.Arn
+  AlarmTopicArn:
+    Description: Subscribe an email address here for an alert path independent of Slack
+    Value: !Ref AlarmTopic
+  DashboardUrl:
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=ffx-bball-bot

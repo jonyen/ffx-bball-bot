@@ -69,4 +69,5 @@ jobs:
           SLACK_BOT_USER_ID: ${{ secrets.SLACK_BOT_USER_ID }}
           SLACK_CHANNELS: ${{ vars.SLACK_CHANNELS }}
           FAILURE_DM_USER: ${{ vars.FAILURE_DM_USER }}
+          ALARM_CHANNEL: ${{ vars.ALARM_CHANNEL }}
         run: bash scripts/deploy.sh

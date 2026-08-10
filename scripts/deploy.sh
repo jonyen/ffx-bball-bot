@@ -13,7 +13,7 @@ if [ -f "$ROOT/.env" ]; then
   set +a
 fi
 
-required=(SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SLACK_BOT_USER_ID SLACK_CHANNELS FAILURE_DM_USER)
+required=(SLACK_BOT_TOKEN SLACK_SIGNING_SECRET SLACK_BOT_USER_ID SLACK_CHANNELS FAILURE_DM_USER ALARM_CHANNEL)
 missing=()
 for v in "${required[@]}"; do
   if [ -z "${!v:-}" ]; then
@@ -35,7 +35,7 @@ SCHEDULE_NAME=ffx-bball-post-schedule
 GIT_SHA="${GITHUB_SHA:-$(git -C "$ROOT" rev-parse HEAD)}"
 GITHUB_RUN_NUMBER="${GITHUB_RUN_NUMBER:-local}"
 
-PARAMS="SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID SlackChannels=$SLACK_CHANNELS FailureDmUser=$FAILURE_DM_USER GitSha=$GIT_SHA GithubRunNumber=$GITHUB_RUN_NUMBER"
+PARAMS="SlackBotToken=$SLACK_BOT_TOKEN SlackSigningSecret=$SLACK_SIGNING_SECRET SlackBotUserId=$SLACK_BOT_USER_ID SlackChannels=$SLACK_CHANNELS FailureDmUser=$FAILURE_DM_USER AlarmChannel=$ALARM_CHANNEL GitSha=$GIT_SHA GithubRunNumber=$GITHUB_RUN_NUMBER"
 
 SCHED_ERR="$(mktemp)"
 trap 'rm -f "$SCHED_ERR"' EXIT

@@ -5,13 +5,21 @@ import {
   parseChannels,
 } from '../shared/slack.js';
 import { resolveWeather } from '../shared/weatherResolver.js';
+import { log, metric, withCorrelationId } from '../shared/logger.js';
 
 const EMPTY_ROSTER = { in: [], out: [], maybe: [] };
+const DIMENSIONS = { Lambda: 'postMessage' };
 
-export async function handler(_event) {
+export async function handler(_event, context) {
+  return withCorrelationId(context?.awsRequestId, () => run());
+}
+
+async function run() {
   const token = process.env.SLACK_BOT_TOKEN;
   const botUserId = process.env.SLACK_BOT_USER_ID;
   const channels = parseChannels(process.env.SLACK_CHANNELS);
+
+  log.info('roll call starting', { channelCount: channels.length });
 
   const weather = await resolveWeather({ token, channels, botUserId, target: 'noon' });
 
@@ -28,6 +36,7 @@ export async function handler(_event) {
     if (result.status === 'rejected') {
       const channel = channels[i];
       failures.push({ channel, error: result.reason });
+      log.error('roll call post failed', { channel, error: result.reason });
       await notifyFailure({
         token,
         error: result.reason,
@@ -39,6 +48,18 @@ export async function handler(_event) {
       });
     }
   }
+
+  const posted = results.length - failures.length;
+
+  // The SLI. RollCallPosted is what "the bot worked" means — Lambda finishing
+  // without throwing does not imply anyone saw a roll call. The heartbeat alarm
+  // watches this metric going missing, which is the failure Lambda errors miss.
+  metric('RollCallPosted', posted, { dimensions: DIMENSIONS });
+  if (failures.length > 0) {
+    metric('RollCallFailed', failures.length, { dimensions: DIMENSIONS });
+  }
+
+  log.info('roll call finished', { posted, failed: failures.length });
 
   if (failures.length === channels.length && channels.length > 0) {
     throw failures[0].error;

@@ -212,6 +212,36 @@ And one repository **variable** (Settings → Secrets and variables → Actions 
 
 Create a `production` environment in **Settings → Environments** and add deploy-protection rules (required reviewers, wait timer, branch restrictions). The workflow already references `environment: production`, so the rules take effect automatically — no workflow change needed.
 
+## Observability
+
+**SLO: 99% of scheduled roll calls post to every target channel, monthly.**
+
+The SLI is the `FfxBballBot/RollCallPosted` metric rather than Lambda success —
+a Lambda that finishes cleanly having posted nothing is a failure by this
+definition, and that is the gap plain error counts miss.
+
+- **Structured logs.** Every line is one JSON object, and every line from an
+  invocation carries the same `correlationId`, so a single roll call can be
+  followed across functions in Logs Insights.
+- **Metrics** are emitted through CloudWatch Embedded Metric Format — they ride
+  inside the log line, so there is no `PutMetricData` call, no added latency on
+  the request path, and no per-metric API cost.
+- **Alarms** publish to the `ffx-bball-alarms` SNS topic, which a dedicated
+  Lambda relays into Slack. The alert path deliberately avoids the bot's own
+  code path. Subscribe an email address to the same topic for a path that
+  survives a Slack outage.
+- **Dashboard** `ffx-bball-bot` is defined in `infra/template.yaml`, so it is
+  version-controlled rather than clicked together.
+
+| Alarm | Fires when |
+| --- | --- |
+| `roll-call-missing` | No roll call for 5 consecutive days |
+| `roll-call-failures` | A roll call failed on at least one channel |
+| `function-errors` | The post-message Lambda threw |
+| `slash-command-slow` | `/ball` p99 above 2.5s against Slack's 3s deadline |
+
+See [`docs/RUNBOOK.md`](docs/RUNBOOK.md) for what to do when one fires.
+
 ## Notes
 
 - **Scheduling:** the cron runs on EventBridge Scheduler with `ScheduleExpressionTimezone: America/New_York`, so 8:00 AM ET stays fixed year-round across DST transitions.

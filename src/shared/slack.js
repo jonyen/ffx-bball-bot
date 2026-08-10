@@ -1,4 +1,6 @@
-export const FAILURE_DM_USER = 'U0000000000';
+// Slack user DMed on unrecoverable failures. Set FAILURE_DM_USER in the
+// environment; there is no default, and failure notices are dropped without it.
+export const FAILURE_DM_USER = process.env.FAILURE_DM_USER ?? '';
 
 const BASE = 'https://slack.com/api';
 
@@ -109,7 +111,13 @@ export async function notifyFailure({ token, error, context }) {
       formatError(error) +
       '\n```';
 
-    await postMessage({ token, channel: FAILURE_DM_USER, text });
+    const target = process.env.FAILURE_DM_USER ?? '';
+    if (!target) {
+      console.error('notifyFailure: FAILURE_DM_USER is unset; dropping notification');
+      return;
+    }
+
+    await postMessage({ token, channel: target, text });
   } catch (dmError) {
     console.error('notifyFailure: failed to send DM', dmError);
   }

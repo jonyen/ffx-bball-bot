@@ -16,8 +16,10 @@ Parameters:
     Description: Slack user ID of the bot itself (used to filter reactions on own messages)
   SlackChannels:
     Type: String
-    Default: C0123456789
     Description: Comma-separated list of target Slack channel IDs
+  FailureDmUser:
+    Type: String
+    Description: Slack user ID DMed on unrecoverable failures
   ScheduleExpression:
     Type: String
     Default: cron(0 8 ? * TUE,THU *)
@@ -47,6 +49,7 @@ Globals:
         SLACK_SIGNING_SECRET: !Ref SlackSigningSecret
         SLACK_BOT_USER_ID: !Ref SlackBotUserId
         SLACK_CHANNELS: !Ref SlackChannels
+        FAILURE_DM_USER: !Ref FailureDmUser
 
 Resources:
   PostMessageFunction:

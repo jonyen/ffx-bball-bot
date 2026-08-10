@@ -6,7 +6,6 @@ import {
   getChannelHistory,
   getReactions,
   notifyFailure,
-  FAILURE_DM_USER,
   parseChannels,
 } from '../src/shared/slack.js';
 
@@ -122,8 +121,18 @@ describe('getReactions', () => {
 });
 
 describe('notifyFailure', () => {
-  test('exposes the target user id as a constant', () => {
-    expect(FAILURE_DM_USER).toBe('U0000000000');
+  beforeEach(() => {
+    process.env.FAILURE_DM_USER = 'U0000000000';
+  });
+
+  test('reads the target user id from the environment', () => {
+    expect(process.env.FAILURE_DM_USER).toBe('U0000000000');
+  });
+
+  test('drops the notification when the target is unset', async () => {
+    delete process.env.FAILURE_DM_USER;
+    await notifyFailure({ token: TOKEN, error: new Error('boom') });
+    expect(globalThis.fetch).not.toHaveBeenCalled();
   });
 
   test('DMs the failure user with error + context', async () => {

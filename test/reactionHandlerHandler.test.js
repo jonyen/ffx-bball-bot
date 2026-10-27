@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeEach, vi } from 'vitest';
+import { describe, test, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('../src/reactionHandler/verifySignature.js', () => ({
   verifySignature: vi.fn(),
@@ -290,5 +290,90 @@ describe('reactionHandler', () => {
     const text = updateMessage.mock.calls[0][0].text;
     expect(text).toContain('<@U1>');
     expect(text).not.toContain(`<@${BOT}>`);
+  });
+
+  describe('stale reactions.get reads', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+      getHistory.mockResolvedValue({
+        messages: [{ user: BOT, text: '🏀 today?', ts: '1.2' }],
+      });
+      updateMessage.mockResolvedValue({ ok: true });
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    function reactionEvent(type, user = 'U5', reaction = 'basketball') {
+      return event({
+        type: 'event_callback',
+        event: { type, user, reaction, item: { channel: 'C1', ts: '1.2' } },
+      });
+    }
+
+    test('re-reads until an added reaction shows up', async () => {
+      getReactions
+        .mockResolvedValueOnce({
+          message: { reactions: [{ name: 'basketball', users: ['U1'] }] },
+        })
+        .mockResolvedValueOnce({
+          message: { reactions: [{ name: 'basketball', users: ['U1', 'U5'] }] },
+        });
+
+      const pending = handler(reactionEvent('reaction_added'));
+      await vi.runAllTimersAsync();
+      const res = await pending;
+
+      expect(res.statusCode).toBe(200);
+      expect(getReactions).toHaveBeenCalledTimes(2);
+      expect(updateMessage.mock.calls[0][0].text).toContain(
+        'In (2): <@U1>, <@U5>',
+      );
+    });
+
+    test('re-reads until a removed reaction is gone', async () => {
+      getReactions
+        .mockResolvedValueOnce({
+          message: { reactions: [{ name: 'basketball', users: ['U1', 'U5'] }] },
+        })
+        .mockResolvedValueOnce({
+          message: { reactions: [{ name: 'basketball', users: ['U1'] }] },
+        });
+
+      const pending = handler(reactionEvent('reaction_removed'));
+      await vi.runAllTimersAsync();
+      await pending;
+
+      expect(getReactions).toHaveBeenCalledTimes(2);
+      expect(updateMessage.mock.calls[0][0].text).not.toContain('<@U5>');
+    });
+
+    test('reads once when the first read already reflects the event', async () => {
+      getReactions.mockResolvedValue({
+        message: { reactions: [{ name: 'basketball', users: ['U5'] }] },
+      });
+
+      const pending = handler(reactionEvent('reaction_added'));
+      await vi.runAllTimersAsync();
+      await pending;
+
+      expect(getReactions).toHaveBeenCalledTimes(1);
+    });
+
+    test('gives up after the retries and writes the last read', async () => {
+      getReactions.mockResolvedValue({
+        message: { reactions: [{ name: 'basketball', users: ['U1'] }] },
+      });
+
+      const pending = handler(reactionEvent('reaction_added'));
+      await vi.runAllTimersAsync();
+      const res = await pending;
+
+      expect(res.statusCode).toBe(200);
+      expect(getReactions).toHaveBeenCalledTimes(4);
+      expect(updateMessage).toHaveBeenCalledTimes(1);
+      expect(updateMessage.mock.calls[0][0].text).toContain('In (1): <@U1>');
+    });
   });
 });

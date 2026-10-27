@@ -14,6 +14,34 @@ import {
 
 const REACTION_EVENTS = new Set(['reaction_added', 'reaction_removed']);
 
+// reactions.get can trail the event: a read taken right after reaction_added
+// may not list the new reaction yet, and the post would be rewritten without
+// it. Re-read after each delay until the event shows. Total stays well under
+// Slack's 3s event deadline.
+const RESYNC_DELAYS_MS = [250, 500, 750];
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function reflectsEvent(reactions, inner) {
+  if (!inner.user || !inner.reaction) return true;
+  const entry = reactions.find((r) => r.name === inner.reaction);
+  const present = entry?.users?.includes(inner.user) ?? false;
+  return inner.type === 'reaction_added' ? present : !present;
+}
+
+// If the event never shows, the last read wins: a later opposite event may
+// have already undone it.
+async function readReactions({ token, channel, ts, inner }) {
+  let reactions = [];
+  for (const delay of [0, ...RESYNC_DELAYS_MS]) {
+    if (delay) await sleep(delay);
+    const result = await getReactions({ token, channel, ts });
+    reactions = result.message?.reactions ?? [];
+    if (reflectsEvent(reactions, inner)) break;
+  }
+  return reactions;
+}
+
 function response(statusCode, body = '') {
   return { statusCode, body };
 }
@@ -57,8 +85,7 @@ export async function handler(event) {
       return response(200);
     }
 
-    const reactionsResult = await getReactions({ token, channel, ts });
-    const reactions = reactionsResult.message?.reactions ?? [];
+    const reactions = await readReactions({ token, channel, ts, inner });
     const roster = categorize(reactions, botUserId);
 
     const originalText = original.text ?? '';
